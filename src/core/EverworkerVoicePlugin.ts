@@ -147,30 +147,30 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     private async initializeVoice(): Promise<void> {
         try {
-            console.log('Plugin: Initializing voice features...');
+            console.log('🎤 Plugin: Initializing voice features...');
             this.webrtc = new WebRTCManager(this.config, this.connection!);
             
             // Handle transcriptions
             this.webrtc.on('transcription', (text: string, isFinal: boolean) => {
-                console.log('Plugin: Received transcription:', text, 'Final:', isFinal);
+                console.log('📢 Plugin: Received transcription:', text, 'Final:', isFinal);
                 if (this.config.callbacks?.onTranscription) {
                     this.config.callbacks.onTranscription(text, isFinal);
                 }
                 
-                if (this.ui && isFinal) {
-                    this.ui.showTranscription(text);
+                if (this.ui) {
+                    this.ui.showTranscription(text, isFinal);
                 }
             });
 
             // Handle audio output
             this.webrtc.on('audio', (audioData: ArrayBuffer) => {
-                console.log('Plugin: Received audio data, size:', audioData.byteLength);
+                console.log('🎵 Plugin: Received audio data, size:', audioData.byteLength);
                 this.playAudio(audioData);
             });
             
             // Handle messages from WebRTC
             this.webrtc.on('message', (data: any) => {
-                console.log('Plugin: Received message from WebRTC:', data);
+                console.log('💬 Plugin: Received message from WebRTC:', data);
                 this.handleMessage(data);
             });
             
@@ -178,19 +178,57 @@ export class EverworkerVoicePlugin extends EventEmitter {
             let accumulatedText = '';
             this.webrtc.on('text:delta', (delta: string) => {
                 accumulatedText += delta;
-                console.log('Plugin: Text delta received, accumulated:', accumulatedText);
+                console.log('✍️ Plugin: Text delta received, accumulated length:', accumulatedText.length);
+                if (this.ui) {
+                    this.ui.showResponse(delta, true); // Show delta incrementally
+                }
+            });
+            
+            // Handle complete responses
+            this.webrtc.on('response:complete', (text: string) => {
+                console.log('✅ Plugin: Response complete:', text);
+                accumulatedText = ''; // Reset accumulator
+                if (this.ui) {
+                    this.ui.clearResponse();
+                }
+            });
+            
+            // Handle speech events
+            this.webrtc.on('speech:start', () => {
+                console.log('🎤 Plugin: Speech started');
+                if (this.ui) {
+                    this.ui.setSpeechDetected(true);
+                }
+            });
+            
+            this.webrtc.on('speech:end', () => {
+                console.log('🔇 Plugin: Speech ended');
+                if (this.ui) {
+                    this.ui.setSpeechDetected(false);
+                }
+            });
+            
+            // Handle recording events
+            this.webrtc.on('recording:start', () => {
+                console.log('🔴 Plugin: Recording started');
+            });
+            
+            this.webrtc.on('recording:stop', () => {
+                console.log('⏹️ Plugin: Recording stopped');
             });
             
             // Handle errors
             this.webrtc.on('error', (error: Error) => {
-                console.error('Plugin: WebRTC error:', error);
+                console.error('❌ Plugin: WebRTC error:', error);
                 this.handleError(error);
             });
 
+            console.log('🔌 Plugin: Starting WebRTC initialization...');
             await this.webrtc.initialize();
-            console.log('Plugin: Voice initialization complete!');
+            console.log('✅ Plugin: Voice initialization complete!');
         } catch (error) {
-            console.error('Plugin: Failed to initialize voice:', error);
+            console.error('❌ Plugin: Failed to initialize voice:', error);
+            console.error('Error details:', error);
             this.handleError(error instanceof Error ? error : new Error('Voice initialization failed'));
             // Voice initialization failure shouldn't break the connection
             // User can still use the plugin without voice features
@@ -218,7 +256,10 @@ export class EverworkerVoicePlugin extends EventEmitter {
     }
 
     public async sendMessage(text: string): Promise<void> {
+        console.log('📨 Plugin: Sending message:', text);
+        
         if (this.state !== 'connected') {
+            console.error('❌ Plugin: Cannot send message - not connected. State:', this.state);
             throw new Error('Not connected');
         }
 
@@ -230,46 +271,57 @@ export class EverworkerVoicePlugin extends EventEmitter {
             source: 'text'
         };
 
+        console.log('📝 Plugin: Adding message to UI');
         this.addMessage(message);
         
         try {
             // If voice is enabled and WebRTC is connected, send through WebRTC
             if (this.webrtc) {
+                console.log('🎯 Plugin: Sending through WebRTC');
                 this.webrtc.sendTextMessage(text);
             } else if (this.connection) {
                 // Fallback to connection adapter (REST API)
+                console.log('🎯 Plugin: Sending through connection adapter');
                 await this.connection.sendMessage(text);
             } else {
+                console.error('❌ Plugin: No communication channel available');
                 throw new Error('No communication channel available');
             }
+            console.log('✅ Plugin: Message sent successfully');
         } catch (error) {
-            console.error('Failed to send message:', error);
+            console.error('❌ Plugin: Failed to send message:', error);
             // If it's the WebRTC error about using data channel, that's expected for DDP
             if (error instanceof Error && error.message.includes('WebRTC')) {
                 // For DDP connections without voice, we can't send text messages
                 // This is a limitation of the current architecture
-                console.warn('Text messaging requires WebRTC connection. Enable voice feature or use REST API.');
+                console.warn('⚠️ Plugin: Text messaging requires WebRTC connection. Enable voice feature or use REST API.');
             }
             throw error;
         }
     }
 
     public async startVoiceInput(): Promise<void> {
+        console.log('🎤 Plugin: Starting voice input...');
         if (!this.webrtc) {
+            console.error('❌ Plugin: Voice not initialized');
             throw new Error('Voice not initialized');
         }
 
         await this.webrtc.startRecording();
         this.ui?.setVoiceActive(true);
+        console.log('✅ Plugin: Voice input started');
     }
 
     public stopVoiceInput(): void {
+        console.log('🔇 Plugin: Stopping voice input...');
         if (!this.webrtc) {
+            console.warn('⚠️ Plugin: WebRTC not initialized, skipping');
             return;
         }
 
         this.webrtc.stopRecording();
         this.ui?.setVoiceActive(false);
+        console.log('✅ Plugin: Voice input stopped');
     }
 
     private handleMessage(data: any): void {

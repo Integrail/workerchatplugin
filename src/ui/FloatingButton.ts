@@ -12,11 +12,13 @@ export class FloatingButton {
     private notificationCount = 0;
 
     constructor(parent: HTMLElement, config: UIConfig, onClick: () => void) {
+        console.log('FloatingButton: Creating button with config:', config);
         this.config = config;
         this.onClick = onClick;
         this.container = this.createContainer();
         this.button = this.createButton();
         parent.appendChild(this.container);
+        console.log('FloatingButton: Button created and appended to parent');
     }
 
     private createContainer(): HTMLElement {
@@ -82,15 +84,6 @@ export class FloatingButton {
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
-            
-            &:hover {
-                transform: scale(1.05);
-                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-            }
-            
-            &:active {
-                transform: scale(0.95);
-            }
         `;
     }
 

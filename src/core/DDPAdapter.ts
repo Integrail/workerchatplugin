@@ -316,13 +316,38 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
 
     // Voice-specific methods
     public async getEphemeralKey(): Promise<any> {
-        return this.call('voice.getEphemeralKey', [this.config.workerId]);
+        // Get JWT token if available
+        const jwtToken = this.getJwtToken();
+        
+        // Pass workerId, selectedVoice (undefined), and JWT token
+        return this.call('voice.getEphemeralKey', [
+            this.config.workerId,
+            undefined, // selectedVoice
+            jwtToken
+        ]);
     }
 
     public async processRealtimeToolCall(toolCall: any): Promise<any> {
+        // Get JWT token if available
+        const jwtToken = this.getJwtToken();
+        
         return this.call('voice.processRealtimeToolCall', [
+            toolCall,
             this.config.workerId,
-            toolCall
+            undefined, // sessionId
+            jwtToken
         ]);
+    }
+
+    private getJwtToken(): string | undefined {
+        if (this.config.auth?.type === 'token' && this.config.auth.token) {
+            // If token is a function, it should return the JWT token
+            // If it's a string, use it directly
+            const token = typeof this.config.auth.token === 'string' 
+                ? this.config.auth.token 
+                : undefined;
+            return token;
+        }
+        return undefined;
     }
 }

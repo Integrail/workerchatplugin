@@ -16,6 +16,11 @@ export class ChatInterface {
     private messages: Message[] = [];
     private isVoiceActive = false;
     private transcriptionElement: HTMLElement | null = null;
+    private responseElement: HTMLElement | null = null;
+    private statusElement: HTMLElement | null = null;
+    private isSpeechDetected = false;
+    private currentTranscription = '';
+    private currentResponse = '';
 
     constructor(
         parent: HTMLElement,
@@ -313,6 +318,7 @@ export class ChatInterface {
     }
 
     public setVoiceActive(active: boolean): void {
+        console.log('🎙️ ChatInterface: Voice active:', active);
         this.isVoiceActive = active;
         
         if (active) {
@@ -323,11 +329,13 @@ export class ChatInterface {
                     <rect x="9" y="9" width="6" height="6" rx="1"></rect>
                 </svg>
             `;
+            this.setSpeechDetected(true);
         } else {
             const theme = this.getTheme();
             this.voiceButton.style.background = theme.inputBg;
             this.voiceButton.style.color = theme.text;
             this.voiceButton.innerHTML = this.getMicIcon();
+            this.setSpeechDetected(false);
         }
     }
 
@@ -396,35 +404,93 @@ export class ChatInterface {
         this.messagesContainer.innerHTML = '';
     }
 
-    public showTranscription(text: string): void {
-        if (!this.transcriptionElement) {
-            this.transcriptionElement = document.createElement('div');
-            const theme = this.getTheme();
-            
-            this.transcriptionElement.className = 'ew-transcription';
-            this.transcriptionElement.style.cssText = `
-                padding: 8px 12px;
-                background: ${theme.inputBg};
-                color: ${theme.textSecondary};
+    public showTranscription(text: string, isFinal: boolean = false): void {
+        console.log('📝 ChatInterface: Showing transcription:', text, 'Final:', isFinal);
+        this.currentTranscription = text;
+        this.updateLiveStatus();
+        
+        if (isFinal) {
+            // Clear transcription after showing final
+            setTimeout(() => {
+                this.currentTranscription = '';
+                this.updateLiveStatus();
+            }, 2000);
+        }
+    }
+    
+    public showResponse(text: string, isDelta: boolean = false): void {
+        console.log('💬 ChatInterface: Showing response:', text.substring(0, 50), 'Delta:', isDelta);
+        if (isDelta) {
+            this.currentResponse += text;
+        } else {
+            this.currentResponse = text;
+        }
+        this.updateLiveStatus();
+    }
+    
+    public clearResponse(): void {
+        this.currentResponse = '';
+        this.updateLiveStatus();
+    }
+    
+    public setSpeechDetected(detected: boolean): void {
+        console.log('🎤 ChatInterface: Speech detected:', detected);
+        this.isSpeechDetected = detected;
+        this.updateLiveStatus();
+    }
+    
+    private updateLiveStatus(): void {
+        const theme = this.getTheme();
+        
+        // Create or update status container
+        if (!this.statusElement) {
+            this.statusElement = document.createElement('div');
+            this.statusElement.className = 'ew-live-status';
+            this.statusElement.style.cssText = `
+                padding: 12px 20px;
+                background: linear-gradient(135deg, ${theme.inputBg}, ${theme.messageBg});
+                border-top: 1px solid ${theme.border};
                 font-size: 13px;
-                font-style: italic;
-                border-radius: 8px;
-                margin: 8px 20px;
-                animation: ew-fade-in 0.2s ease;
+                min-height: 60px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
             `;
-            
-            this.messagesContainer.appendChild(this.transcriptionElement);
+            // Insert before input container
+            this.container.insertBefore(this.statusElement, this.inputContainer);
         }
         
-        this.transcriptionElement.textContent = `Transcribing: "${text}"`;
+        let statusHTML = '';
         
-        // Remove after 3 seconds
-        setTimeout(() => {
-            if (this.transcriptionElement) {
-                this.transcriptionElement.remove();
-                this.transcriptionElement = null;
-            }
-        }, 3000);
+        // Show speech detection status
+        if (this.isSpeechDetected) {
+            statusHTML += `<div style="color: ${theme.textSecondary}; font-size: 12px;">🎤 Listening...</div>`;
+        }
+        
+        // Show transcription
+        if (this.currentTranscription) {
+            statusHTML += `
+                <div style="color: ${theme.text}; margin-top: 4px;">
+                    <span style="color: ${theme.textSecondary}; font-size: 11px; display: block;">You said:</span>
+                    <span style="font-style: italic;">"${this.currentTranscription}"</span>
+                </div>
+            `;
+        }
+        
+        // Show AI response
+        if (this.currentResponse) {
+            statusHTML += `
+                <div style="color: ${theme.text}; margin-top: 4px; padding: 8px; background: ${theme.userMessageBg}20; border-radius: 8px;">
+                    <span style="color: ${theme.textSecondary}; font-size: 11px; display: block;">AI is responding...</span>
+                    <span>${this.currentResponse}</span>
+                </div>
+            `;
+        }
+        
+        this.statusElement.innerHTML = statusHTML || '<div style="color: #999; font-style: italic;">Ready to chat...</div>';
+        
+        // Auto-scroll to show latest
+        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
 
     public setConnectionState(state: ConnectionState): void {

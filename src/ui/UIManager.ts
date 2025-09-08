@@ -24,20 +24,25 @@ export class UIManager {
     private isVisible = true;
 
     constructor(config: UIConfig, callbacks: UICallbacks) {
+        console.log('UIManager: Initializing with config:', config);
         this.config = config;
         this.callbacks = callbacks;
         
         if (config.container) {
+            console.log('UIManager: Using provided container');
             this.container = config.container;
             this.shadowRoot = this.container.attachShadow({ mode: 'open' });
             this.isExpanded = true; // Container mode starts expanded
         } else {
+            console.log('UIManager: Creating floating container');
             this.container = this.createFloatingContainer();
             this.shadowRoot = this.container.attachShadow({ mode: 'open' });
             document.body.appendChild(this.container);
+            console.log('UIManager: Container appended to body');
         }
         
         this.initialize();
+        console.log('UIManager: Initialization complete');
     }
 
     private createFloatingContainer(): HTMLElement {
@@ -71,6 +76,7 @@ export class UIManager {
     }
 
     private initialize(): void {
+        console.log('UIManager: Starting initialization');
         // Add styles
         this.injectStyles();
         
@@ -78,24 +84,29 @@ export class UIManager {
         const wrapper = document.createElement('div');
         wrapper.className = 'ew-wrapper';
         this.shadowRoot.appendChild(wrapper);
+        console.log('UIManager: Wrapper created and appended');
         
         // Create components based on mode
         if (!this.config.container) {
             // Floating mode - create button
+            console.log('UIManager: Creating floating button');
             this.button = new FloatingButton(
                 wrapper,
                 this.config,
                 () => this.toggleExpanded()
             );
+            console.log('UIManager: Floating button created');
         }
         
         // Create chat interface
+        console.log('UIManager: Creating chat interface');
         this.chat = new ChatInterface(
             wrapper,
             this.config,
             this.callbacks,
             !this.config.container // Show header in floating mode
         );
+        console.log('UIManager: Chat interface created');
         
         // Set initial state
         if (this.config.container) {
@@ -103,6 +114,7 @@ export class UIManager {
         } else {
             this.chat.hide();
         }
+        console.log('UIManager: Initial state set');
     }
 
     private injectStyles(): void {
@@ -120,6 +132,16 @@ export class UIManager {
                 flex-direction: column;
                 align-items: flex-end;
                 gap: 12px;
+            }
+            
+            /* Button styles */
+            .ew-floating-button:hover {
+                transform: scale(1.05);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            }
+            
+            .ew-floating-button:active {
+                transform: scale(0.95);
             }
             
             /* Animations */
@@ -248,9 +270,27 @@ export class UIManager {
         }
     }
 
-    public showTranscription(text: string): void {
+    public showTranscription(text: string, isFinal: boolean = false): void {
         if (this.chat) {
-            this.chat.showTranscription(text);
+            this.chat.showTranscription(text, isFinal);
+        }
+    }
+    
+    public showResponse(text: string, isDelta: boolean = false): void {
+        if (this.chat) {
+            this.chat.showResponse(text, isDelta);
+        }
+    }
+    
+    public clearResponse(): void {
+        if (this.chat) {
+            this.chat.clearResponse();
+        }
+    }
+    
+    public setSpeechDetected(detected: boolean): void {
+        if (this.chat) {
+            this.chat.setSpeechDetected(detected);
         }
     }
 
