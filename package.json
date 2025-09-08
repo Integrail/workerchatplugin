@@ -2,6 +2,7 @@
   "name": "@everworker/voice-plugin",
   "version": "1.0.0",
   "description": "Embeddable voice and chat plugin for Everworker AI agents",
+  "type": "module",
   "main": "dist/everworker-voice.cjs.js",
   "module": "dist/everworker-voice.esm.js",
   "browser": "dist/everworker-voice.umd.js",
@@ -13,6 +14,7 @@
     "build": "rollup -c",
     "dev": "rollup -c -w",
     "test": "jest",
+    "serve": "node test-server.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

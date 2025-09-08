@@ -25,9 +25,7 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
     private messageId = 0;
     private pendingCalls: Map<string, { resolve: Function; reject: Function }> = new Map();
     private subscriptions: Map<string, string> = new Map();
-    private sessionId: string | null = null;
     private heartbeatInterval: any = null;
-    private reconnectTimer: any = null;
 
     constructor(config: PluginConfig) {
         super();
@@ -102,7 +100,7 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
     private handleMessage(message: DDPMessage, connectResolve?: Function): void {
         switch (message.msg) {
             case 'connected':
-                this.sessionId = message.session;
+                // Session ID received from server
                 this.state = 'connected';
                 this.startHeartbeat();
                 if (connectResolve) {
@@ -305,7 +303,6 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
         this.stopHeartbeat();
         this.pendingCalls.clear();
         this.subscriptions.clear();
-        this.sessionId = null;
     }
 
     public disconnect(): void {
