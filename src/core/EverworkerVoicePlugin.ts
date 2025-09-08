@@ -22,6 +22,9 @@ export class EverworkerVoicePlugin extends EventEmitter {
     private reconnectAttempts = 0;
     private reconnectTimer: any = null;
     private initialized = false;
+    private sessionActive = false;
+    private sessionStartTime: Date | null = null;
+    private sessionTimeoutTimer: any = null;
 
     constructor(config: PluginConfig) {
         super();
@@ -81,7 +84,9 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 onSendMessage: this.sendMessage.bind(this),
                 onStartVoice: this.startVoiceInput.bind(this),
                 onStopVoice: this.stopVoiceInput.bind(this),
-                onToggleExpanded: this.handleToggleExpanded.bind(this)
+                onToggleExpanded: this.handleToggleExpanded.bind(this),
+                onStartSession: this.startSession.bind(this),
+                onEndSession: this.endSession.bind(this)
             });
 
             // Load persisted messages
@@ -90,8 +95,8 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 this.ui.setMessages(this.messages);
             }
 
-            // Initialize connection
-            await this.connect();
+            // Don't auto-connect, wait for user to start session
+            this.setState('disconnected');
             
             this.initialized = true;
             this.emit('initialized');
@@ -258,6 +263,11 @@ export class EverworkerVoicePlugin extends EventEmitter {
     public async sendMessage(text: string): Promise<void> {
         console.log('📨 Plugin: Sending message:', text);
         
+        if (!this.sessionActive) {
+            console.error('❌ Plugin: Cannot send message - no active session');
+            throw new Error('Please start a session first');
+        }
+        
         if (this.state !== 'connected') {
             console.error('❌ Plugin: Cannot send message - not connected. State:', this.state);
             throw new Error('Not connected');
@@ -300,8 +310,119 @@ export class EverworkerVoicePlugin extends EventEmitter {
         }
     }
 
+    public async startSession(): Promise<void> {
+        console.log('🚀 Plugin: Starting voice session...');
+        
+        if (this.sessionActive) {
+            console.warn('⚠️ Plugin: Session already active');
+            return;
+        }
+
+        try {
+            // Connect to server
+            await this.connect();
+            
+            // Mark session as active
+            this.sessionActive = true;
+            this.sessionStartTime = new Date();
+            
+            // Update UI
+            this.ui?.setSessionActive(true);
+            
+            // Auto-start microphone
+            try {
+                console.log('🎤 Plugin: Auto-starting microphone...');
+                await this.startVoiceInput();
+            } catch (error) {
+                console.warn('⚠️ Plugin: Could not auto-start microphone:', error);
+                // Don't fail the session if mic can't start
+            }
+            
+            // Set up session timeout (14 minutes warning, 15 minutes disconnect)
+            this.setupSessionTimeout();
+            
+            console.log('✅ Plugin: Voice session started');
+            this.emit('session:started');
+        } catch (error) {
+            console.error('❌ Plugin: Failed to start session:', error);
+            this.sessionActive = false;
+            throw error;
+        }
+    }
+
+    public async endSession(): Promise<void> {
+        console.log('🛑 Plugin: Ending voice session...');
+        
+        if (!this.sessionActive) {
+            console.warn('⚠️ Plugin: No active session');
+            return;
+        }
+
+        // Clear timeout timer
+        this.clearSessionTimeout();
+        
+        // Disconnect WebRTC
+        this.disconnect();
+        
+        // Mark session as inactive
+        this.sessionActive = false;
+        this.sessionStartTime = null;
+        
+        // Update UI
+        this.ui?.setSessionActive(false);
+        
+        console.log('✅ Plugin: Voice session ended');
+        this.emit('session:ended');
+    }
+
+    private setupSessionTimeout(): void {
+        // Clear any existing timer
+        this.clearSessionTimeout();
+        
+        // Warning at 14 minutes
+        setTimeout(() => {
+            if (this.sessionActive) {
+                console.warn('⚠️ Plugin: Session will timeout in 1 minute');
+                this.ui?.showError('Session will timeout in 1 minute. Please save your work.');
+                this.emit('session:timeout-warning');
+            }
+        }, 14 * 60 * 1000);
+        
+        // Auto-disconnect at 15 minutes
+        this.sessionTimeoutTimer = setTimeout(() => {
+            if (this.sessionActive) {
+                console.warn('⏰ Plugin: Session timeout reached, disconnecting...');
+                this.ui?.showError('Session timed out after 15 minutes. Please start a new session.');
+                this.endSession();
+                this.emit('session:timeout');
+            }
+        }, 15 * 60 * 1000);
+    }
+
+    private clearSessionTimeout(): void {
+        if (this.sessionTimeoutTimer) {
+            clearTimeout(this.sessionTimeoutTimer);
+            this.sessionTimeoutTimer = null;
+        }
+    }
+
+    public isSessionActive(): boolean {
+        return this.sessionActive;
+    }
+
+    public getSessionDuration(): number | null {
+        if (!this.sessionStartTime) return null;
+        return Date.now() - this.sessionStartTime.getTime();
+    }
+
     public async startVoiceInput(): Promise<void> {
         console.log('🎤 Plugin: Starting voice input...');
+        
+        if (!this.sessionActive) {
+            console.error('❌ Plugin: No active session');
+            throw new Error('Please start a session first');
+        }
+        
         if (!this.webrtc) {
             console.error('❌ Plugin: Voice not initialized');
             throw new Error('Voice not initialized');
@@ -314,6 +435,12 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     public stopVoiceInput(): void {
         console.log('🔇 Plugin: Stopping voice input...');
+        
+        if (!this.sessionActive) {
+            console.warn('⚠️ Plugin: No active session');
+            return;
+        }
+        
         if (!this.webrtc) {
             console.warn('⚠️ Plugin: WebRTC not initialized, skipping');
             return;

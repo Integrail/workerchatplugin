@@ -7,6 +7,8 @@ export interface UICallbacks {
     onStartVoice: () => void;
     onStopVoice: () => void;
     onToggleExpanded: (expanded: boolean) => void;
+    onStartSession: () => void;
+    onEndSession: () => void;
 }
 
 /**
@@ -244,6 +246,12 @@ export class UIManager {
         }
         if (this.chat) {
             this.chat.setConnectionState(state);
+        }
+    }
+
+    public setSessionActive(active: boolean): void {
+        if (this.chat) {
+            this.chat.setSessionActive(active);
         }
     }
 

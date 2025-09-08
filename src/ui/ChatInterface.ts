@@ -11,6 +11,7 @@ export class ChatInterface {
     private textInput: HTMLInputElement;
     private voiceButton: HTMLButtonElement;
     private sendButton: HTMLButtonElement;
+    private sessionButton: HTMLButtonElement;
     private config: UIConfig;
     private callbacks: UICallbacks;
     private messages: Message[] = [];
@@ -21,6 +22,7 @@ export class ChatInterface {
     private isSpeechDetected = false;
     private currentTranscription = '';
     private currentResponse = '';
+    private sessionActive = false;
 
     constructor(
         parent: HTMLElement,
@@ -34,6 +36,7 @@ export class ChatInterface {
         parent.appendChild(this.container);
         
         this.messagesContainer = this.createMessagesContainer();
+        this.sessionButton = this.createSessionButton();
         this.inputContainer = this.createInputContainer();
         this.textInput = this.createTextInput();
         this.voiceButton = this.createVoiceButton();
@@ -157,6 +160,78 @@ export class ChatInterface {
         
         this.container.appendChild(container);
         return container;
+    }
+
+    private createSessionButton(): HTMLButtonElement {
+        const container = document.createElement('div');
+        const button = document.createElement('button');
+        const theme = this.getTheme();
+        
+        container.className = 'ew-session-control';
+        container.style.cssText = `
+            padding: 12px 16px;
+            border-bottom: 1px solid ${theme.border};
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: ${theme.background};
+        `;
+        
+        button.className = 'ew-session-button';
+        button.style.cssText = `
+            padding: 10px 24px;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        `;
+        
+        // Set initial state (Start Session)
+        button.style.background = '#28a745';
+        button.style.color = 'white';
+        button.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Start Session
+        `;
+        
+        container.appendChild(button);
+        this.container.appendChild(container);
+        return button;
+    }
+
+    private updateSessionButton(): void {
+        if (!this.sessionButton) {
+            return; // Button not yet created
+        }
+        
+        const theme = this.getTheme();
+        
+        if (this.sessionActive) {
+            this.sessionButton.style.background = '#dc3545';
+            this.sessionButton.style.color = 'white';
+            this.sessionButton.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                </svg>
+                End Session
+            `;
+        } else {
+            this.sessionButton.style.background = '#28a745';
+            this.sessionButton.style.color = 'white';
+            this.sessionButton.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Start Session
+            `;
+        }
     }
 
     private createInputContainer(): HTMLElement {
@@ -286,6 +361,9 @@ export class ChatInterface {
     }
 
     private setupEventListeners(): void {
+        // Session button click
+        this.sessionButton.addEventListener('click', () => this.toggleSession());
+        
         // Text input enter key
         this.textInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -299,6 +377,14 @@ export class ChatInterface {
         
         // Voice button click
         this.voiceButton.addEventListener('click', () => this.toggleVoice());
+    }
+
+    private toggleSession(): void {
+        if (this.sessionActive) {
+            this.callbacks.onEndSession();
+        } else {
+            this.callbacks.onStartSession();
+        }
     }
 
     private sendMessage(): void {
@@ -494,14 +580,28 @@ export class ChatInterface {
     }
 
     public setConnectionState(state: ConnectionState): void {
-        // Update UI based on connection state
-        const isConnected = state === 'connected';
-        this.textInput.disabled = !isConnected;
-        this.sendButton.disabled = !isConnected;
-        this.voiceButton.disabled = !isConnected;
+        // Connection state is separate from session state
+        // Don't automatically update session state here
         
-        if (!isConnected) {
-            this.textInput.placeholder = `${state}...`;
+        // Just update status display if needed
+        if (state === 'connecting') {
+            // Could show connecting status
+        } else if (state === 'error') {
+            // Could show error status
+        }
+    }
+
+    public setSessionActive(active: boolean): void {
+        this.sessionActive = active;
+        this.updateSessionButton();
+        
+        // Enable/disable input controls based on session state
+        this.textInput.disabled = !active;
+        this.sendButton.disabled = !active;
+        this.voiceButton.disabled = !active;
+        
+        if (!active) {
+            this.textInput.placeholder = 'Start a session to begin chatting...';
         } else {
             this.textInput.placeholder = 'Type a message...';
         }
