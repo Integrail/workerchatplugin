@@ -25,17 +25,31 @@ export class WebRTCManager extends EventEmitter {
 
     public async initialize(): Promise<void> {
         try {
+            console.log('WebRTC Manager: Starting initialization...');
+            
             // Get ephemeral key from server
+            console.log('WebRTC Manager: Getting ephemeral key from server...');
             this.session = await this.getEphemeralKey();
+            console.log('WebRTC Manager: Received session data:', {
+                model: this.session.model,
+                voice: this.session.voice,
+                hasKey: !!this.session.client_secret?.value,
+                expiresAt: this.session.client_secret?.expires_at,
+                toolsCount: this.session.tools?.length || 0
+            });
             
             // Setup WebRTC connection
+            console.log('WebRTC Manager: Setting up WebRTC connection...');
             await this.setupWebRTC();
             
             // Initialize audio context
+            console.log('WebRTC Manager: Initializing audio context...');
             this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
             this.audioPlayer = new AudioPlayer(this.audioContext);
+            
+            console.log('WebRTC Manager: Initialization complete!');
         } catch (error) {
-            console.error('Failed to initialize WebRTC:', error);
+            console.error('WebRTC Manager: Failed to initialize:', error);
             throw error;
         }
     }
@@ -113,17 +127,22 @@ export class WebRTCManager extends EventEmitter {
             throw new Error('No session available');
         }
 
-        const response = await fetch('https://api.openai.com/v1/realtime', {
+        const baseUrl = 'https://api.openai.com/v1/realtime';
+        const model = this.session.model;
+        
+        const response = await fetch(`${baseUrl}?model=${model}`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${this.session.ephemeralKey}`,
+                'Authorization': `Bearer ${this.session.client_secret.value}`,
                 'Content-Type': 'application/sdp'
             },
             body: offer.sdp
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to connect to OpenAI: ${response.statusText}`);
+            const errorText = await response.text();
+            console.error('OpenAI Realtime API error:', response.status, errorText);
+            throw new Error(`Failed to connect to OpenAI: ${response.status} ${response.statusText}`);
         }
 
         const answerSdp = await response.text();
@@ -162,9 +181,9 @@ export class WebRTCManager extends EventEmitter {
         const sessionConfig: RealtimeEvent = {
             type: 'session.update',
             session: {
-                model: this.session.model || 'gpt-4o-realtime-preview',
-                voice: this.session.voice || 'alloy',
-                instructions: this.session.instructions || '',
+                model: this.session.model,
+                voice: this.session.voice,
+                instructions: this.session.instructions,
                 input_audio_format: 'pcm16',
                 output_audio_format: 'pcm16',
                 input_audio_transcription: {
@@ -180,6 +199,7 @@ export class WebRTCManager extends EventEmitter {
             }
         };
 
+        console.log('Sending session update:', sessionConfig);
         this.sendEvent(sessionConfig);
     }
 

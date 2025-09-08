@@ -147,10 +147,12 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     private async initializeVoice(): Promise<void> {
         try {
+            console.log('Plugin: Initializing voice features...');
             this.webrtc = new WebRTCManager(this.config, this.connection!);
             
             // Handle transcriptions
             this.webrtc.on('transcription', (text: string, isFinal: boolean) => {
+                console.log('Plugin: Received transcription:', text, 'Final:', isFinal);
                 if (this.config.callbacks?.onTranscription) {
                     this.config.callbacks.onTranscription(text, isFinal);
                 }
@@ -162,11 +164,13 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
             // Handle audio output
             this.webrtc.on('audio', (audioData: ArrayBuffer) => {
+                console.log('Plugin: Received audio data, size:', audioData.byteLength);
                 this.playAudio(audioData);
             });
             
             // Handle messages from WebRTC
             this.webrtc.on('message', (data: any) => {
+                console.log('Plugin: Received message from WebRTC:', data);
                 this.handleMessage(data);
             });
             
@@ -174,18 +178,22 @@ export class EverworkerVoicePlugin extends EventEmitter {
             let accumulatedText = '';
             this.webrtc.on('text:delta', (delta: string) => {
                 accumulatedText += delta;
-                // You could emit partial messages here if needed
+                console.log('Plugin: Text delta received, accumulated:', accumulatedText);
             });
             
             // Handle errors
             this.webrtc.on('error', (error: Error) => {
+                console.error('Plugin: WebRTC error:', error);
                 this.handleError(error);
             });
 
             await this.webrtc.initialize();
+            console.log('Plugin: Voice initialization complete!');
         } catch (error) {
-            console.error('Failed to initialize voice:', error);
-            // Voice initialization failure shouldn't break text chat
+            console.error('Plugin: Failed to initialize voice:', error);
+            this.handleError(error instanceof Error ? error : new Error('Voice initialization failed'));
+            // Voice initialization failure shouldn't break the connection
+            // User can still use the plugin without voice features
         }
     }
 

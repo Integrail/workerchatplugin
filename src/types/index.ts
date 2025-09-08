@@ -83,12 +83,13 @@ export interface ConnectionAdapter {
 }
 
 export interface VoiceSession {
-    id: string;
-    ephemeralKey: string;
-    expiresAt: Date;
+    client_secret: {
+        value: string;
+        expires_at: number;
+    };
     model: string;
-    voice?: string;
-    instructions?: string;
+    voice: string;
+    instructions: string;
     tools?: any[];
 }
 
