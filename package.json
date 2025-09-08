@@ -1,0 +1,46 @@
+{
+  "name": "@everworker/voice-plugin",
+  "version": "1.0.0",
+  "description": "Embeddable voice and chat plugin for Everworker AI agents",
+  "main": "dist/everworker-voice.cjs.js",
+  "module": "dist/everworker-voice.esm.js",
+  "browser": "dist/everworker-voice.umd.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "everworker",
+    "voice",
+    "chat",
+    "ai",
+    "webrtc",
+    "realtime"
+  ],
+  "author": "Everworker",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/node": "^20.11.0",
+    "rollup": "^4.9.5",
+    "rollup-plugin-postcss": "^4.0.2",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {},
+  "peerDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Integrail/everworker-voice-plugin"
+  }
+}
