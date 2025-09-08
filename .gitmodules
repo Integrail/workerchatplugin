@@ -1,0 +1,3 @@
+[submodule "imports/plugins/voice-embed"]
+	path = imports/plugins/voice-embed
+	url = /Users/aantich/dev/everworker-voice-plugin

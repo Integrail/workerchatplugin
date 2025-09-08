@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Everworker Voice Plugin - Advanced Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f0f2f5;
+        }
+        
+        .header {
+            background: white;
+            border-bottom: 1px solid #ddd;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            color: #333;
+            font-size: 24px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .panel h2 {
+            margin-top: 0;
+            color: #444;
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .control-group input,
+        .control-group select,
+        .control-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .control-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .events-log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .event-item {
+            padding: 4px;
+            margin: 2px 0;
+            border-left: 3px solid #667eea;
+            background: white;
+        }
+        
+        .custom-container {
+            height: 400px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            position: relative;
+            background: #fafafa;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Everworker Voice Plugin - Advanced Example</h1>
+    </div>
+
+    <div class="container">
+        <!-- Configuration Panel -->
+        <div class="panel">
+            <h2>Configuration</h2>
+            
+            <div class="control-group">
+                <label>Endpoint</label>
+                <input type="text" id="endpoint" value="ws://localhost:3000">
+            </div>
+            
+            <div class="control-group">
+                <label>Worker ID</label>
+                <input type="text" id="workerId" value="test-worker">
+            </div>
+            
+            <div class="control-group">
+                <label>Auth Type</label>
+                <select id="authType">
+                    <option value="anonymous">Anonymous</option>
+                    <option value="token">Token</option>
+                    <option value="jwt">JWT</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Token/JWT (if applicable)</label>
+                <input type="text" id="authToken" placeholder="Enter token or JWT">
+            </div>
+            
+            <div class="control-group">
+                <label>UI Position</label>
+                <select id="uiPosition">
+                    <option value="bottom-right">Bottom Right</option>
+                    <option value="bottom-left">Bottom Left</option>
+                    <option value="top-right">Top Right</option>
+                    <option value="top-left">Top Left</option>
+                    <option value="custom">Custom Container</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Theme</label>
+                <select id="theme">
+                    <option value="auto">Auto</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Primary Color</label>
+                <input type="color" id="primaryColor" value="#667eea">
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="enableVoice" checked> Enable Voice
+                </label>
+                <label>
+                    <input type="checkbox" id="enableText" checked> Enable Text
+                </label>
+                <label>
+                    <input type="checkbox" id="autoConnect" checked> Auto Connect
+                </label>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-primary" onclick="initPlugin()">Initialize</button>
+                <button class="btn-danger" onclick="destroyPlugin()">Destroy</button>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="panel">
+            <h2>Controls</h2>
+            
+            <div class="control-group">
+                <label>Send Message Programmatically</label>
+                <textarea id="messageText" placeholder="Enter message to send..."></textarea>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-primary" onclick="sendMessage()">Send Message</button>
+                <button class="btn-secondary" onclick="clearMessages()">Clear Chat</button>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-success" onclick="connect()">Connect</button>
+                <button class="btn-danger" onclick="disconnect()">Disconnect</button>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-secondary" onclick="showPlugin()">Show</button>
+                <button class="btn-secondary" onclick="hidePlugin()">Hide</button>
+                <button class="btn-secondary" onclick="expandPlugin()">Expand</button>
+                <button class="btn-secondary" onclick="minimizePlugin()">Minimize</button>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="messageCount">0</div>
+                    <div class="stat-label">Messages</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="connectionState">-</div>
+                    <div class="stat-label">Connection</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Container -->
+        <div class="panel">
+            <h2>Custom Container Mode</h2>
+            <p>When "Custom Container" is selected, the chat will appear here:</p>
+            <div id="customContainer" class="custom-container"></div>
+        </div>
+
+        <!-- Events Log -->
+        <div class="panel">
+            <h2>Events Log</h2>
+            <div id="eventsLog" class="events-log"></div>
+            <button class="btn-secondary" onclick="clearLog()" style="margin-top: 10px;">Clear Log</button>
+        </div>
+    </div>
+
+    <script src="../dist/everworker-voice.min.js"></script>
+    <script>
+        let plugin = null;
+        let messageCount = 0;
+        
+        function logEvent(event, data) {
+            const log = document.getElementById('eventsLog');
+            const item = document.createElement('div');
+            item.className = 'event-item';
+            item.textContent = `[${new Date().toLocaleTimeString()}] ${event}: ${JSON.stringify(data || {})}`;
+            log.appendChild(item);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function updateStats() {
+            document.getElementById('messageCount').textContent = messageCount;
+            if (plugin) {
+                document.getElementById('connectionState').textContent = plugin.getState();
+            }
+        }
+        
+        function initPlugin() {
+            if (plugin) {
+                plugin.destroy();
+            }
+            
+            const position = document.getElementById('uiPosition').value;
+            const config = {
+                endpoint: document.getElementById('endpoint').value,
+                workerId: document.getElementById('workerId').value,
+                auth: {
+                    type: document.getElementById('authType').value,
+                    token: document.getElementById('authToken').value || undefined
+                },
+                ui: {
+                    position: position === 'custom' ? 'bottom-right' : position,
+                    theme: document.getElementById('theme').value,
+                    primaryColor: document.getElementById('primaryColor').value,
+                    container: position === 'custom' ? document.getElementById('customContainer') : undefined
+                },
+                features: {
+                    voice: document.getElementById('enableVoice').checked,
+                    text: document.getElementById('enableText').checked,
+                    autoConnect: document.getElementById('autoConnect').checked,
+                    persistence: 'session'
+                },
+                callbacks: {
+                    onConnect: () => {
+                        logEvent('connect');
+                        updateStats();
+                    },
+                    onDisconnect: (reason) => {
+                        logEvent('disconnect', { reason });
+                        updateStats();
+                    },
+                    onMessage: (message) => {
+                        messageCount++;
+                        logEvent('message', { 
+                            type: message.type, 
+                            source: message.source,
+                            content: message.content.substring(0, 50) + '...'
+                        });
+                        updateStats();
+                    },
+                    onError: (error) => {
+                        logEvent('error', { message: error.message });
+                        updateStats();
+                    },
+                    onStateChange: (state) => {
+                        logEvent('stateChange', { state });
+                        updateStats();
+                    },
+                    onTranscription: (text, isFinal) => {
+                        logEvent('transcription', { text, isFinal });
+                    }
+                }
+            };
+            
+            try {
+                plugin = new EverworkerVoice.Plugin(config);
+                logEvent('initialized', config);
+                updateStats();
+            } catch (error) {
+                logEvent('error', { message: error.message });
+            }
+        }
+        
+        function destroyPlugin() {
+            if (plugin) {
+                plugin.destroy();
+                plugin = null;
+                logEvent('destroyed');
+                messageCount = 0;
+                updateStats();
+            }
+        }
+        
+        function sendMessage() {
+            if (!plugin) {
+                alert('Please initialize the plugin first');
+                return;
+            }
+            
+            const text = document.getElementById('messageText').value;
+            if (text) {
+                plugin.sendMessage(text).catch(err => {
+                    logEvent('error', { message: err.message });
+                });
+                document.getElementById('messageText').value = '';
+            }
+        }
+        
+        function clearMessages() {
+            if (plugin) {
+                plugin.clearMessages();
+                messageCount = 0;
+                updateStats();
+                logEvent('messagesCleared');
+            }
+        }
+        
+        function connect() {
+            if (plugin) {
+                plugin.connect().catch(err => {
+                    logEvent('error', { message: err.message });
+                });
+            }
+        }
+        
+        function disconnect() {
+            if (plugin) {
+                plugin.disconnect();
+            }
+        }
+        
+        function showPlugin() {
+            if (plugin) {
+                plugin.show();
+                logEvent('show');
+            }
+        }
+        
+        function hidePlugin() {
+            if (plugin) {
+                plugin.hide();
+                logEvent('hide');
+            }
+        }
+        
+        function expandPlugin() {
+            if (plugin) {
+                plugin.expand();
+                logEvent('expand');
+            }
+        }
+        
+        function minimizePlugin() {
+            if (plugin) {
+                plugin.minimize();
+                logEvent('minimize');
+            }
+        }
+        
+        function clearLog() {
+            document.getElementById('eventsLog').innerHTML = '';
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (plugin) {
+                plugin.destroy();
+            }
+        });
+    </script>
+</body>
+</html>

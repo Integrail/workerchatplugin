@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Everworker Voice Plugin - Simple Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        p {
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .config {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .config h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        
+        .config input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        .config button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        
+        .config button:hover {
+            background: #5a67d8;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Everworker Voice Plugin</h1>
+        <p>This is a simple example demonstrating how to integrate the Everworker Voice Plugin into your website.</p>
+        
+        <div class="config">
+            <h3>Configuration</h3>
+            <input type="text" id="endpoint" placeholder="WebSocket Endpoint (e.g., wss://your-instance.everworker.ai)" value="ws://localhost:3000">
+            <input type="text" id="workerId" placeholder="Worker ID" value="test-worker">
+            <input type="text" id="token" placeholder="API Token (optional)">
+            <button onclick="initializePlugin()">Initialize Plugin</button>
+            <div id="status" class="status"></div>
+        </div>
+        
+        <h2>How it works</h2>
+        <p>Once initialized, you'll see a floating button in the bottom-right corner of the page. Click it to open the chat interface where you can:</p>
+        <ul>
+            <li>Type messages to interact with your AI agent</li>
+            <li>Use voice input for hands-free communication</li>
+            <li>See real-time transcriptions of your speech</li>
+            <li>Receive both text and voice responses</li>
+        </ul>
+        
+        <h2>Features</h2>
+        <ul>
+            <li>✅ Real-time WebRTC voice streaming</li>
+            <li>✅ DDP connection with fallback to REST API</li>
+            <li>✅ Shadow DOM for style isolation</li>
+            <li>✅ Persistent chat history</li>
+            <li>✅ Auto-reconnection</li>
+            <li>✅ Dark mode support</li>
+        </ul>
+    </div>
+
+    <!-- Include the plugin -->
+    <script src="../dist/everworker-voice.min.js"></script>
+    
+    <script>
+        let plugin = null;
+        
+        function initializePlugin() {
+            const endpoint = document.getElementById('endpoint').value;
+            const workerId = document.getElementById('workerId').value;
+            const token = document.getElementById('token').value;
+            const statusEl = document.getElementById('status');
+            
+            if (!endpoint || !workerId) {
+                statusEl.className = 'status error';
+                statusEl.textContent = 'Please provide both endpoint and worker ID';
+                return;
+            }
+            
+            try {
+                // Destroy existing instance if any
+                if (plugin) {
+                    plugin.destroy();
+                }
+                
+                // Initialize the plugin
+                plugin = EverworkerVoice.init({
+                    endpoint: endpoint,
+                    workerId: workerId,
+                    auth: token ? {
+                        type: 'token',
+                        token: token
+                    } : {
+                        type: 'anonymous'
+                    },
+                    ui: {
+                        position: 'bottom-right',
+                        theme: 'auto',
+                        primaryColor: '#667eea'
+                    },
+                    features: {
+                        voice: true,
+                        text: true,
+                        persistence: 'session'
+                    },
+                    callbacks: {
+                        onConnect: () => {
+                            console.log('Connected to Everworker');
+                            statusEl.className = 'status success';
+                            statusEl.textContent = 'Successfully connected! Look for the chat button in the bottom-right corner.';
+                        },
+                        onDisconnect: () => {
+                            console.log('Disconnected from Everworker');
+                        },
+                        onMessage: (message) => {
+                            console.log('Received message:', message);
+                        },
+                        onError: (error) => {
+                            console.error('Error:', error);
+                            statusEl.className = 'status error';
+                            statusEl.textContent = `Error: ${error.message}`;
+                        }
+                    }
+                });
+                
+                statusEl.className = 'status success';
+                statusEl.textContent = 'Plugin initialized! Connecting...';
+                
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.textContent = `Failed to initialize: ${error.message}`;
+            }
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (plugin) {
+                plugin.destroy();
+            }
+        });
+    </script>
+</body>
+</html>
