@@ -85,47 +85,9 @@ export class RESTAdapter extends EventEmitter implements ConnectionAdapter {
     }
 
     public async sendMessage(text: string): Promise<void> {
-        if (this.state !== 'connected') {
-            throw new Error('Not connected');
-        }
-
-        try {
-            // Execute agent with message
-            const response = await fetch(`${this.baseUrl}/api/v1/agents/execute`, {
-                method: 'POST',
-                headers: this.headers,
-                body: JSON.stringify({
-                    agentId: this.config.workerId,
-                    parameters: {
-                        message: text,
-                        type: 'text',
-                        timestamp: new Date().toISOString()
-                    },
-                    sessionId: this.executionId
-                })
-            });
-
-            if (!response.ok) {
-                const error = await response.text();
-                throw new Error(`Failed to send message: ${error}`);
-            }
-
-            const result = await response.json();
-            
-            // Store execution ID for polling
-            if (result.executionId && !this.executionId) {
-                this.executionId = result.executionId;
-                this.startPolling();
-            }
-
-            // Emit the response if immediate
-            if (result.response) {
-                this.handleResponse(result.response);
-            }
-        } catch (error) {
-            this.emit('error', error);
-            throw error;
-        }
+        // REST adapter doesn't support text messaging for voice workers
+        // Text messages must go through WebRTC data channel
+        throw new Error('Text messages are only supported through WebRTC connection. Enable voice feature to send messages.');
     }
 
     private startPolling(): void {

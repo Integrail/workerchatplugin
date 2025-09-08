@@ -213,11 +213,19 @@ export class WebRTCManager extends EventEmitter {
                 break;
 
             case 'response.text.delta':
-                this.emit('message', {
-                    type: 'assistant',
-                    content: event.delta,
-                    source: 'voice'
-                });
+                // Accumulate text deltas for complete message
+                this.emit('text:delta', event.delta);
+                break;
+            
+            case 'response.text.done':
+                // Complete text response
+                if (event.text) {
+                    this.emit('message', {
+                        type: 'assistant',
+                        content: event.text,
+                        source: 'voice'
+                    });
+                }
                 break;
 
             case 'response.audio.delta':

@@ -149,6 +149,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
         try {
             this.webrtc = new WebRTCManager(this.config, this.connection!);
             
+            // Handle transcriptions
             this.webrtc.on('transcription', (text: string, isFinal: boolean) => {
                 if (this.config.callbacks?.onTranscription) {
                     this.config.callbacks.onTranscription(text, isFinal);
@@ -159,9 +160,26 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 }
             });
 
+            // Handle audio output
             this.webrtc.on('audio', (audioData: ArrayBuffer) => {
-                // Handle audio output
                 this.playAudio(audioData);
+            });
+            
+            // Handle messages from WebRTC
+            this.webrtc.on('message', (data: any) => {
+                this.handleMessage(data);
+            });
+            
+            // Handle text deltas for streaming
+            let accumulatedText = '';
+            this.webrtc.on('text:delta', (delta: string) => {
+                accumulatedText += delta;
+                // You could emit partial messages here if needed
+            });
+            
+            // Handle errors
+            this.webrtc.on('error', (error: Error) => {
+                this.handleError(error);
             });
 
             await this.webrtc.initialize();
@@ -192,7 +210,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
     }
 
     public async sendMessage(text: string): Promise<void> {
-        if (!this.connection || this.state !== 'connected') {
+        if (this.state !== 'connected') {
             throw new Error('Not connected');
         }
 
@@ -207,9 +225,23 @@ export class EverworkerVoicePlugin extends EventEmitter {
         this.addMessage(message);
         
         try {
-            await this.connection.sendMessage(text);
+            // If voice is enabled and WebRTC is connected, send through WebRTC
+            if (this.webrtc) {
+                this.webrtc.sendTextMessage(text);
+            } else if (this.connection) {
+                // Fallback to connection adapter (REST API)
+                await this.connection.sendMessage(text);
+            } else {
+                throw new Error('No communication channel available');
+            }
         } catch (error) {
             console.error('Failed to send message:', error);
+            // If it's the WebRTC error about using data channel, that's expected for DDP
+            if (error instanceof Error && error.message.includes('WebRTC')) {
+                // For DDP connections without voice, we can't send text messages
+                // This is a limitation of the current architecture
+                console.warn('Text messaging requires WebRTC connection. Enable voice feature or use REST API.');
+            }
             throw error;
         }
     }

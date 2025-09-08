@@ -209,15 +209,9 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
     }
 
     public async sendMessage(text: string): Promise<void> {
-        // Call the voice.sendMessage method or a custom worker method
-        return this.call('voice.sendMessage', [
-            this.config.workerId,
-            {
-                type: 'text',
-                content: text,
-                timestamp: new Date().toISOString()
-            }
-        ]);
+        // Text messages should be sent through WebRTC data channel, not DDP
+        // This is just a placeholder for the interface
+        throw new Error('Text messages should be sent through WebRTC connection. Use WebRTCManager.sendTextMessage()');
     }
 
     public call(method: string, params: any[] = []): Promise<any> {
