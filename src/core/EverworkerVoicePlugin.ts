@@ -25,6 +25,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
     private sessionActive = false;
     private sessionStartTime: Date | null = null;
     private sessionTimeoutTimer: any = null;
+    private readonly MAX_MESSAGES = 100; // Limit message history
 
     constructor(config: PluginConfig) {
         super();
@@ -310,12 +311,17 @@ export class EverworkerVoicePlugin extends EventEmitter {
         }
     }
 
-    public async startSession(): Promise<void> {
+    public async startSession(clearHistory: boolean = false): Promise<void> {
         console.log('🚀 Plugin: Starting voice session...');
         
         if (this.sessionActive) {
             console.warn('⚠️ Plugin: Session already active');
             return;
+        }
+
+        // Optionally clear message history
+        if (clearHistory) {
+            this.clearMessages();
         }
 
         try {
@@ -361,7 +367,15 @@ export class EverworkerVoicePlugin extends EventEmitter {
         // Clear timeout timer
         this.clearSessionTimeout();
         
-        // Disconnect WebRTC
+        // First, stop voice input if active
+        try {
+            console.log('🔇 Plugin: Stopping voice input before disconnect...');
+            this.stopVoiceInput();
+        } catch (error) {
+            console.warn('⚠️ Plugin: Error stopping voice input:', error);
+        }
+        
+        // Disconnect WebRTC and connection
         this.disconnect();
         
         // Mark session as inactive
@@ -470,6 +484,13 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     private addMessage(message: Message): void {
         this.messages.push(message);
+        
+        // Enforce message limit - remove oldest messages if exceeded
+        if (this.messages.length > this.MAX_MESSAGES) {
+            const excess = this.messages.length - this.MAX_MESSAGES;
+            this.messages.splice(0, excess); // Remove oldest messages
+        }
+        
         this.ui?.addMessage(message);
         this.storage.saveMessages(this.messages);
     }
@@ -532,6 +553,11 @@ export class EverworkerVoicePlugin extends EventEmitter {
     }
 
     private handleToggleExpanded(expanded: boolean): void {
+        if (expanded) {
+            this.expand();
+        } else {
+            this.minimize();
+        }
         this.emit('ui:toggle', expanded);
     }
 

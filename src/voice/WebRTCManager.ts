@@ -502,19 +502,22 @@ export class WebRTCManager extends EventEmitter {
         if (this.mediaStream) {
             console.log('🛑 Stopping media tracks...');
             this.mediaStream.getTracks().forEach(track => {
-                console.log(`🛑 Stopping track: ${track.label}`);
-                track.stop();
+                console.log(`🛑 Stopping track: ${track.label}, enabled: ${track.enabled}`);
+                track.enabled = false; // Disable first
+                track.stop(); // Then stop
             });
             this.mediaStream = null;
         }
 
-        // Remove tracks from peer connection
+        // Remove ALL audio tracks from peer connection
         if (this.pc) {
-            const sender = this.pc.getSenders().find(s => s.track?.kind === 'audio');
-            if (sender && sender.track) {
-                console.log('🔄 Removing audio track from peer connection');
-                sender.replaceTrack(null);
-            }
+            const senders = this.pc.getSenders();
+            senders.forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    console.log('🔌 Removing audio track from peer connection');
+                    sender.replaceTrack(null);
+                }
+            });
         }
 
         this.isRecording = false;
@@ -605,8 +608,15 @@ export class WebRTCManager extends EventEmitter {
         }
         
         if (this.audioElement) {
-            console.log('🔊 Removing audio element...');
+            console.log('🔊 Stopping and removing audio element...');
+            // First pause any playback
+            this.audioElement.pause();
+            // Remove the source
             this.audioElement.srcObject = null;
+            // Remove from DOM if it was added
+            if (this.audioElement.parentNode) {
+                this.audioElement.parentNode.removeChild(this.audioElement);
+            }
             this.audioElement = null;
         }
 

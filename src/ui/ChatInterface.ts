@@ -573,7 +573,14 @@ export class ChatInterface {
             `;
         }
         
-        this.statusElement.innerHTML = statusHTML || '<div style="color: #999; font-style: italic;">Ready to chat...</div>';
+        // Only show status if there's actual content
+        if (statusHTML) {
+            this.statusElement.innerHTML = statusHTML;
+            this.statusElement.style.display = 'flex';
+        } else {
+            this.statusElement.innerHTML = '';
+            this.statusElement.style.display = 'none';
+        }
         
         // Auto-scroll to show latest
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
