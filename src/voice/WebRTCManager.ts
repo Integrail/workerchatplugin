@@ -325,6 +325,14 @@ export class WebRTCManager extends EventEmitter {
             case 'conversation.item.input_audio_transcription.completed':
                 console.log('📢 Transcription completed:', event.transcript);
                 this.emit('transcription', event.transcript, true);
+                // Also emit as a message for chat history
+                if (event.transcript) {
+                    this.emit('message', {
+                        type: 'user',
+                        content: event.transcript,
+                        source: 'voice'
+                    });
+                }
                 break;
 
             case 'conversation.item.input_audio_transcription.in_progress':
@@ -374,6 +382,17 @@ export class WebRTCManager extends EventEmitter {
                 
             case 'response.audio.done':
                 console.log('🎶 Audio response complete');
+                break;
+
+            case 'response.audio_transcript.done':
+                console.log('🎙️ Assistant audio transcript:', event.transcript);
+                if (event.transcript) {
+                    this.emit('message', {
+                        type: 'assistant',
+                        content: event.transcript,
+                        source: 'voice'
+                    });
+                }
                 break;
 
             case 'response.function_call_arguments.done':

@@ -327,7 +327,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
     private handleMessage(data: any): void {
         const message: Message = {
             id: data.id || this.generateId(),
-            type: 'assistant',
+            type: data.type || 'assistant',  // Use the type from data if provided
             content: data.content || data.text || '',
             timestamp: new Date(data.timestamp || Date.now()),
             source: data.source || 'text',
