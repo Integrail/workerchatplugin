@@ -297,6 +297,22 @@ export class WebRTCManager extends EventEmitter {
         }
     }
 
+    private sendStopEvents(): void {
+        console.log('🛑 Sending stop events to OpenAI...');
+        
+        // Cancel any ongoing response from the assistant
+        this.sendEvent({ type: 'response.cancel' });
+        console.log('📤 Sent response.cancel');
+        
+        // Clear the input audio buffer to stop processing any pending audio
+        this.sendEvent({ type: 'input_audio_buffer.clear' });
+        console.log('📤 Sent input_audio_buffer.clear');
+        
+        // Optionally clear output audio buffer as well
+        this.sendEvent({ type: 'output_audio_buffer.clear' });
+        console.log('📤 Sent output_audio_buffer.clear');
+    }
+
     private handleRealtimeEvent(event: RealtimeEvent): void {
         console.log(`🎯 Handling event: ${event.type}`);
         
@@ -578,10 +594,19 @@ export class WebRTCManager extends EventEmitter {
         console.log('✅ Text message sent successfully');
     }
 
-    public cleanup(): void {
+    public async cleanup(): Promise<void> {
         console.log('🧹 Cleaning up WebRTC Manager...');
         
         this.stopRecording();
+
+        // Send stop events to OpenAI before closing connections
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            this.sendStopEvents();
+            
+            // Wait a bit to ensure events are sent
+            console.log('⏳ Waiting for stop events to be sent...');
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
 
         if (this.dataChannel) {
             console.log('🔌 Closing data channel...');

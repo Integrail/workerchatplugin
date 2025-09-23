@@ -241,11 +241,11 @@ export class EverworkerVoicePlugin extends EventEmitter {
         }
     }
 
-    public disconnect(): void {
+    public async disconnect(): Promise<void> {
         this.clearReconnectTimer();
         
         if (this.webrtc) {
-            this.webrtc.cleanup();
+            await this.webrtc.cleanup();
             this.webrtc = null;
         }
 
@@ -375,8 +375,8 @@ export class EverworkerVoicePlugin extends EventEmitter {
             console.warn('⚠️ Plugin: Error stopping voice input:', error);
         }
         
-        // Disconnect WebRTC and connection
-        this.disconnect();
+        // Disconnect WebRTC and connection (await the async operation)
+        await this.disconnect();
         
         // Mark session as inactive
         this.sessionActive = false;
