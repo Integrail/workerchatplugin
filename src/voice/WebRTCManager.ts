@@ -13,6 +13,7 @@ export class WebRTCManager extends EventEmitter {
     private mediaStream: MediaStream | null = null;
     private audioContext: AudioContext | null = null;
     private session: VoiceSession | null = null;
+    private callId: string | null = null; // OpenAI call ID for hangup
     private isRecording = false;
     private audioQueue: ArrayBuffer[] = [];
     private audioPlayer: AudioPlayer | null = null;
@@ -27,7 +28,7 @@ export class WebRTCManager extends EventEmitter {
     public async initialize(): Promise<void> {
         try {
             console.log('🎤 WebRTC Manager: Starting initialization...');
-            
+
             // Get ephemeral key from server
             console.log('🔑 WebRTC Manager: Getting ephemeral key from server...');
             this.session = await this.getEphemeralKey();
@@ -39,20 +40,25 @@ export class WebRTCManager extends EventEmitter {
                 toolsCount: this.session.tools?.length || 0,
                 fullSession: this.session
             });
-            
+
             // Setup WebRTC connection
             console.log('🔌 WebRTC Manager: Setting up WebRTC connection...');
             await this.setupWebRTC();
-            
+
             // Initialize audio context
             console.log('🔊 WebRTC Manager: Initializing audio context...');
             this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
             this.audioPlayer = new AudioPlayer(this.audioContext);
-            
+
             console.log('🎉 WebRTC Manager: Initialization complete!');
         } catch (error) {
             console.error('❌ WebRTC Manager: Failed to initialize:', error);
             console.error('Error stack:', (error as Error).stack);
+
+            // Clean up any partially initialized resources
+            console.log('🧹 Cleaning up after initialization failure...');
+            await this.cleanup();
+
             throw error;
         }
     }
@@ -96,33 +102,11 @@ export class WebRTCManager extends EventEmitter {
         this.setupDataChannelHandlers();
 
         console.log('🎙️ Adding audio transceiver...');
-        // Get user media FIRST to ensure microphone permission
-        console.log('🎙️ Requesting microphone access...');
-        try {
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 24000
-                }
-            });
-            console.log('✅ Microphone access granted, adding track to peer connection');
-            
-            // Add local audio track to peer connection
-            this.mediaStream.getTracks().forEach(track => {
-                console.log(`➕ Adding track: ${track.label}`);
-                if (this.pc && this.mediaStream) {
-                    this.pc.addTrack(track, this.mediaStream);
-                }
-            });
-        } catch (error) {
-            console.error('❌ Failed to get microphone access:', error);
-            console.warn('⚠️ Continuing without microphone - text only mode');
-        }
-        
-        // Add audio transceiver
+        // Add audio transceiver WITHOUT requesting microphone yet
+        // The microphone will be requested later in startRecording()
+        // This prevents creating orphaned media streams
         this.pc.addTransceiver('audio', { direction: 'sendrecv' });
+        console.log('✅ Audio transceiver added (microphone will be requested on demand)');
 
         // Handle remote audio tracks
         this.pc.ontrack = (event) => {
@@ -195,9 +179,15 @@ export class WebRTCManager extends EventEmitter {
             throw new Error('No session available');
         }
 
+        // Ephemeral client secrets use the /v1/realtime?model=... endpoint
+        // The /v1/realtime/calls endpoint is only for direct API key usage
         const baseUrl = 'https://api.openai.com/v1/realtime';
         const model = this.session.model;
-        
+
+        console.log('📤 Connecting to OpenAI Realtime API with ephemeral key...');
+        console.log('Model:', model);
+        console.log('SDP length:', offer.sdp?.length);
+
         const response = await fetch(`${baseUrl}?model=${model}`, {
             method: 'POST',
             headers: {
@@ -207,14 +197,22 @@ export class WebRTCManager extends EventEmitter {
             body: offer.sdp
         });
 
+        console.log('📥 Response status:', response.status);
+
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('OpenAI Realtime API error:', response.status, errorText);
-            throw new Error(`Failed to connect to OpenAI: ${response.status} ${response.statusText}`);
+            console.error('❌ OpenAI Realtime API error:', response.status, response.statusText);
+            console.error('❌ Error body:', errorText);
+            throw new Error(`Failed to connect to OpenAI: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const answerSdp = await response.text();
-        
+        console.log('✅ Received SDP answer, length:', answerSdp.length);
+
+        // Note: Ephemeral key sessions don't provide a call_id in the same way
+        // Session termination happens via peer connection closure and track stopping
+        console.log('ℹ️ Using ephemeral key - session will terminate on peer connection close');
+
         return {
             type: 'answer',
             sdp: answerSdp
@@ -299,16 +297,16 @@ export class WebRTCManager extends EventEmitter {
 
     private sendStopEvents(): void {
         console.log('🛑 Sending stop events to OpenAI...');
-        
+
         // Cancel any ongoing response from the assistant
         this.sendEvent({ type: 'response.cancel' });
         console.log('📤 Sent response.cancel');
-        
+
         // Clear the input audio buffer to stop processing any pending audio
         this.sendEvent({ type: 'input_audio_buffer.clear' });
         console.log('📤 Sent input_audio_buffer.clear');
-        
-        // Optionally clear output audio buffer as well
+
+        // Clear output audio buffer (WebRTC only)
         this.sendEvent({ type: 'output_audio_buffer.clear' });
         console.log('📤 Sent output_audio_buffer.clear');
     }
@@ -470,6 +468,17 @@ export class WebRTCManager extends EventEmitter {
         }
 
         try {
+            // CRITICAL: Stop any existing media stream before creating a new one
+            // This prevents orphaning tracks that would continue listening
+            if (this.mediaStream) {
+                console.log('🧹 Cleaning up existing media stream before creating new one...');
+                this.mediaStream.getTracks().forEach(track => {
+                    console.log(`🛑 Stopping old track: ${track.label}`);
+                    track.stop();
+                });
+                this.mediaStream = null;
+            }
+
             console.log('🎙️ Requesting microphone access...');
             // Get user media
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -486,15 +495,21 @@ export class WebRTCManager extends EventEmitter {
             if (this.pc && this.mediaStream) {
                 const audioTrack = this.mediaStream.getAudioTracks()[0];
                 console.log('🎵 Audio track obtained:', audioTrack.label);
-                
-                const sender = this.pc.getSenders().find(s => s.track?.kind === 'audio');
-                
+
+                // Find the audio sender (it was created by addTransceiver in setupWebRTC)
+                // The sender might not have a track yet, so check for audio media type
+                const sender = this.pc.getSenders().find(s => {
+                    // Match on either: has no track (empty sender) or has audio track
+                    return s.track === null || s.track.kind === 'audio';
+                });
+
                 if (sender) {
-                    console.log('🔄 Replacing existing audio track');
-                    sender.replaceTrack(audioTrack);
+                    console.log('🔄 Replacing/setting audio track on existing sender');
+                    await sender.replaceTrack(audioTrack);
+                    console.log('✅ Audio track set successfully');
                 } else {
-                    console.log('➕ Adding new audio track to peer connection');
-                    this.pc.addTrack(audioTrack, this.mediaStream);
+                    console.error('❌ No audio sender found - this should not happen!');
+                    throw new Error('No audio sender available');
                 }
             }
 
@@ -509,12 +524,9 @@ export class WebRTCManager extends EventEmitter {
 
     public stopRecording(): void {
         console.log('🔇 Stopping recording...');
-        if (!this.isRecording) {
-            console.log('⚠️ Not recording, skipping');
-            return;
-        }
 
-        // Stop media tracks
+        // ALWAYS stop media tracks regardless of isRecording flag
+        // This ensures cleanup works even if tracks were created during setup
         if (this.mediaStream) {
             console.log('🛑 Stopping media tracks...');
             this.mediaStream.getTracks().forEach(track => {
@@ -536,9 +548,13 @@ export class WebRTCManager extends EventEmitter {
             });
         }
 
-        this.isRecording = false;
-        console.log('⏹️ Recording stopped');
-        this.emit('recording:stop');
+        if (this.isRecording) {
+            this.isRecording = false;
+            console.log('⏹️ Recording stopped');
+            this.emit('recording:stop');
+        } else {
+            console.log('⏹️ Media tracks stopped (recording was not active)');
+        }
     }
 
     private handleAudioOutput(audioData: ArrayBuffer): void {
@@ -596,28 +612,70 @@ export class WebRTCManager extends EventEmitter {
 
     public async cleanup(): Promise<void> {
         console.log('🧹 Cleaning up WebRTC Manager...');
-        
-        this.stopRecording();
 
-        // Send stop events to OpenAI before closing connections
+        // Step 1: Send stop events to OpenAI before closing connections
+        // This follows OpenAI Realtime API best practices
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
             this.sendStopEvents();
-            
-            // Wait a bit to ensure events are sent
+
+            // Wait briefly to ensure events are sent before closing connection
             console.log('⏳ Waiting for stop events to be sent...');
             await new Promise(resolve => setTimeout(resolve, 200));
         }
 
+        // Step 2: Stop microphone tracks from our mediaStream reference AND remove from senders
+        // Per OpenAI docs: track.stop() ends the microphone capture
+        // This also removes tracks from peer connection via replaceTrack(null)
+        this.stopRecording();
+
+        // Step 3: Safety net - stop any remaining orphaned tracks from peer connection senders
+        // This catches any tracks that might not have been in our mediaStream reference
+        if (this.pc) {
+            console.log('🔍 Checking peer connection for any remaining orphaned tracks...');
+            const senders = this.pc.getSenders();
+            let foundOrphans = false;
+            senders.forEach(sender => {
+                if (sender.track) {
+                    console.warn(`⚠️ Found orphaned track: ${sender.track.label}, kind: ${sender.track.kind}`);
+                    sender.track.stop();
+                    foundOrphans = true;
+                }
+            });
+            if (!foundOrphans) {
+                console.log('✅ No orphaned tracks found');
+            }
+        }
+
+        // Step 4: Close the peer connection (this also closes the data channel)
+        // Per OpenAI docs: pc.close() stops transmission and closes the data channel
+        // For ephemeral key sessions, this closure signals OpenAI to terminate the session
+        if (this.pc) {
+            console.log('📡 Closing peer connection (this terminates the OpenAI session)...');
+            this.pc.close();
+            this.pc = null;
+        }
+
+        // Step 5: Clean up data channel reference (already closed by pc.close())
         if (this.dataChannel) {
-            console.log('🔌 Closing data channel...');
-            this.dataChannel.close();
+            console.log('🔌 Clearing data channel reference...');
             this.dataChannel = null;
         }
 
-        if (this.pc) {
-            console.log('📡 Closing peer connection...');
-            this.pc.close();
-            this.pc = null;
+        // Step 6: Clean up audio playback resources
+        if (this.audioElement) {
+            console.log('🔊 Stopping and removing audio element...');
+            this.audioElement.pause();
+            this.audioElement.srcObject = null;
+            if (this.audioElement.parentNode) {
+                this.audioElement.parentNode.removeChild(this.audioElement);
+            }
+            this.audioElement = null;
+        }
+
+        if (this.audioPlayer) {
+            console.log('🎵 Cleaning up audio player...');
+            this.audioPlayer.cleanup();
+            this.audioPlayer = null;
         }
 
         if (this.audioContext) {
@@ -626,28 +684,11 @@ export class WebRTCManager extends EventEmitter {
             this.audioContext = null;
         }
 
-        if (this.audioPlayer) {
-            console.log('🎵 Cleaning up audio player...');
-            this.audioPlayer.cleanup();
-            this.audioPlayer = null;
-        }
-        
-        if (this.audioElement) {
-            console.log('🔊 Stopping and removing audio element...');
-            // First pause any playback
-            this.audioElement.pause();
-            // Remove the source
-            this.audioElement.srcObject = null;
-            // Remove from DOM if it was added
-            if (this.audioElement.parentNode) {
-                this.audioElement.parentNode.removeChild(this.audioElement);
-            }
-            this.audioElement = null;
-        }
-
+        // Step 7: Clear session data
         this.session = null;
+        this.callId = null;
         this.audioQueue = [];
-        console.log('✅ Cleanup complete');
+        console.log('✅ Cleanup complete - Peer connection closed, all microphone tracks stopped');
     }
 }
 
