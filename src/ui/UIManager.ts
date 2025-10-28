@@ -161,7 +161,58 @@ export class UIManager {
                 0%, 100% { opacity: 1; }
                 50% { opacity: 0.6; }
             }
-            
+
+            /* Glow ring animations for voice controls */
+            @keyframes ew-glow-pulse-1 {
+                0%, 100% {
+                    transform: translate(-50%, -50%) scale(1);
+                    opacity: 0.4;
+                }
+                20% {
+                    transform: translate(-50%, -50%) scale(1.5);
+                    opacity: 0.9;
+                }
+                40% {
+                    transform: translate(-50%, -50%) scale(1.1);
+                    opacity: 0.5;
+                }
+                60% {
+                    transform: translate(-50%, -50%) scale(1.3);
+                    opacity: 0.7;
+                }
+                80% {
+                    transform: translate(-50%, -50%) scale(1.2);
+                    opacity: 0.6;
+                }
+            }
+
+            @keyframes ew-glow-pulse-2 {
+                0%, 100% {
+                    transform: translate(-50%, -50%) scale(1);
+                    opacity: 0.3;
+                }
+                15% {
+                    transform: translate(-50%, -50%) scale(1.3);
+                    opacity: 0.7;
+                }
+                35% {
+                    transform: translate(-50%, -50%) scale(1.6);
+                    opacity: 0.9;
+                }
+                55% {
+                    transform: translate(-50%, -50%) scale(1.2);
+                    opacity: 0.5;
+                }
+                75% {
+                    transform: translate(-50%, -50%) scale(1.4);
+                    opacity: 0.6;
+                }
+                90% {
+                    transform: translate(-50%, -50%) scale(1.1);
+                    opacity: 0.4;
+                }
+            }
+
             /* Scrollbar styles */
             ::-webkit-scrollbar {
                 width: 6px;

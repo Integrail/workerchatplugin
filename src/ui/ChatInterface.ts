@@ -1,5 +1,9 @@
 import { UIConfig, Message, ConnectionState } from '../types';
 import { UICallbacks } from './UIManager';
+import { VoiceVisualizer } from './VoiceVisualizer';
+import { CaptionsOverlay } from './CaptionsOverlay';
+import { VoiceControls } from './VoiceControls';
+import { icons } from './icons';
 
 /**
  * Chat interface component for the voice plugin
@@ -23,6 +27,11 @@ export class ChatInterface {
     private currentTranscription = '';
     private currentResponse = '';
     private sessionActive = false;
+    // New voice-code style components
+    private voiceVisualizer: VoiceVisualizer | null = null;
+    private captionsOverlay: CaptionsOverlay | null = null;
+    private voiceControls: VoiceControls | null = null;
+    private ccEnabled: boolean = false;
 
     constructor(
         parent: HTMLElement,
@@ -34,15 +43,58 @@ export class ChatInterface {
         this.callbacks = callbacks;
         this.container = this.createContainer(showHeader);
         parent.appendChild(this.container);
-        
+
         this.messagesContainer = this.createMessagesContainer();
         this.sessionButton = this.createSessionButton();
         this.inputContainer = this.createInputContainer();
         this.textInput = this.createTextInput();
         this.voiceButton = this.createVoiceButton();
         this.sendButton = this.createSendButton();
-        
+
+        // Initialize new voice-code style components
+        this.initializeVoiceComponents();
+
         this.setupEventListeners();
+    }
+
+    private initializeVoiceComponents(): void {
+        // Create visualizer (shown when voice is active in voice mode)
+        this.voiceVisualizer = new VoiceVisualizer(this.container);
+        this.voiceVisualizer.hide();
+
+        // Create captions overlay (shown when CC is enabled and transcription is active)
+        this.captionsOverlay = new CaptionsOverlay(this.container);
+        this.captionsOverlay.hide();
+
+        // Create voice controls (shown when voice mode is active)
+        this.voiceControls = new VoiceControls(this.container, {
+            onMicClick: () => {
+                // Toggle speech detection (mute/unmute)
+                this.isSpeechDetected = !this.isSpeechDetected;
+                if (this.voiceControls) {
+                    this.voiceControls.setListening(this.isSpeechDetected);
+                }
+                if (this.isSpeechDetected) {
+                    this.voiceVisualizer?.play();
+                } else {
+                    this.voiceVisualizer?.pause();
+                }
+            },
+            onCCClick: () => {
+                // Toggle captions
+                this.ccEnabled = !this.ccEnabled;
+                if (this.ccEnabled) {
+                    this.captionsOverlay?.show();
+                } else {
+                    this.captionsOverlay?.hide();
+                }
+            },
+            onStopClick: () => {
+                // Stop voice session
+                this.callbacks.onStopVoice();
+            }
+        });
+        this.voiceControls.hide();
     }
 
     private createContainer(showHeader: boolean): HTMLElement {
@@ -59,16 +111,19 @@ export class ChatInterface {
     }
 
     private getContainerStyles(): string {
-        const width = this.config.expandedWidth || '380px';
-        const height = this.config.expandedHeight || '600px';
+        const width = this.config.expandedWidth || '360px'; // Voice-code uses max-w-[360px]
+        const maxHeight = 'min(90vh, 600px)';
         const theme = this.getTheme();
-        
+
         return `
             width: ${width};
-            height: ${height};
+            max-width: ${width};
+            height: ${maxHeight};
+            max-height: ${maxHeight};
             background: ${theme.background};
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            border-radius: 10px;
+            border: 1px solid #CFCFCF;
+            box-shadow: -15px 15px 0 0 rgba(0, 0, 0, 0.10);
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -77,17 +132,17 @@ export class ChatInterface {
     }
 
     private getTheme() {
-        const isDark = this.config.theme === 'dark' || 
+        const isDark = this.config.theme === 'dark' ||
             (this.config.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        
+
         return {
             background: isDark ? '#1e1e1e' : '#ffffff',
-            text: isDark ? '#ffffff' : '#333333',
+            text: isDark ? '#ffffff' : '#000000',
             textSecondary: isDark ? '#a0a0a0' : '#666666',
-            border: isDark ? '#333333' : '#e0e0e0',
+            border: isDark ? '#333333' : '#CFCFCF',
             inputBg: isDark ? '#2d2d2d' : '#f5f5f5',
-            messageBg: isDark ? '#2d2d2d' : '#f0f0f0',
-            userMessageBg: this.config.primaryColor || '#007bff'
+            messageBg: isDark ? '#2d2d2d' : '#f3f4f6', // gray-100
+            userMessageBg: this.config.primaryColor || '#ff0d40' // Voice-code brand color
         };
     }
 
@@ -104,14 +159,14 @@ export class ChatInterface {
             align-items: center;
         `;
         
-        const title = document.createElement('h3');
-        title.style.cssText = `
-            margin: 0;
-            font-size: 16px;
-            font-weight: 600;
-            color: ${theme.text};
+        // Everworker logo
+        const logo = document.createElement('img');
+        logo.src = 'https://everworker.ai/hubfs/ew_logo_red.svg';
+        logo.alt = 'Everworker';
+        logo.style.cssText = `
+            height: 32px;
+            width: auto;
         `;
-        title.textContent = 'AI Assistant';
         
         const closeButton = document.createElement('button');
         closeButton.style.cssText = `
@@ -130,15 +185,10 @@ export class ChatInterface {
                 background: ${theme.inputBg};
             }
         `;
-        closeButton.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        `;
+        closeButton.innerHTML = icons.x;
         closeButton.addEventListener('click', () => this.callbacks.onToggleExpanded(false));
-        
-        header.appendChild(title);
+
+        header.appendChild(logo);
         header.appendChild(closeButton);
         
         return header;
@@ -189,10 +239,14 @@ export class ChatInterface {
             display: flex;
             align-items: center;
             gap: 8px;
+
+            &:hover {
+                background: #e00c3a;
+            }
         `;
         
         // Set initial state (Start Session)
-        button.style.background = '#28a745';
+        button.style.background = '#ff0d40';
         button.style.color = 'white';
         button.innerHTML = `
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -214,7 +268,7 @@ export class ChatInterface {
         const theme = this.getTheme();
         
         if (this.sessionActive) {
-            this.sessionButton.style.background = '#dc3545';
+            this.sessionButton.style.background = '#ff0d40';
             this.sessionButton.style.color = 'white';
             this.sessionButton.innerHTML = `
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -223,7 +277,7 @@ export class ChatInterface {
                 End Session
             `;
         } else {
-            this.sessionButton.style.background = '#28a745';
+            this.sessionButton.style.background = '#ff0d40';
             this.sessionButton.style.color = 'white';
             this.sessionButton.innerHTML = `
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -270,7 +324,7 @@ export class ChatInterface {
             transition: border-color 0.2s;
             
             &:focus {
-                border-color: ${this.config.primaryColor || '#007bff'};
+                border-color: ${this.config.primaryColor || '#ff0d40'};
             }
         `;
         
@@ -298,7 +352,7 @@ export class ChatInterface {
             transition: all 0.2s;
             
             &:hover {
-                background: ${this.config.primaryColor || '#007bff'};
+                background: ${this.config.primaryColor || '#ff0d40'};
                 color: white;
             }
         `;
@@ -319,18 +373,19 @@ export class ChatInterface {
             height: 40px;
             border-radius: 50%;
             border: none;
-            background: ${this.config.primaryColor || '#007bff'};
+            background: ${this.config.primaryColor || '#ff0d40'};
             color: white;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.2s;
-            
+
             &:hover {
                 transform: scale(1.05);
+                background: #e00c3a;
             }
-            
+
             &:active {
                 transform: scale(0.95);
             }
@@ -343,21 +398,11 @@ export class ChatInterface {
     }
 
     private getMicIcon(): string {
-        return `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            </svg>
-        `;
+        return icons.mic;
     }
 
     private getSendIcon(): string {
-        return `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-        `;
+        return icons.send;
     }
 
     private setupEventListeners(): void {
@@ -406,22 +451,32 @@ export class ChatInterface {
     public setVoiceActive(active: boolean): void {
         console.log('🎙️ ChatInterface: Voice active:', active);
         this.isVoiceActive = active;
-        
+
         if (active) {
-            this.voiceButton.style.background = '#f44336';
+            // Keep text input visible - user can use both text and voice
+            // Just hide the voice controls bar and visualizer (we don't need them)
+            this.voiceVisualizer?.hide();
+            this.voiceControls?.hide();
+
+            // Update voice button in input to show it's active (red)
+            this.voiceButton.style.background = '#ff0d40';
             this.voiceButton.style.color = 'white';
-            this.voiceButton.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="9" y="9" width="6" height="6" rx="1"></rect>
-                </svg>
-            `;
+            this.voiceButton.innerHTML = icons.square;
+
             this.setSpeechDetected(true);
         } else {
+            // Voice inactive - reset button
+            this.voiceVisualizer?.hide();
+            this.voiceControls?.hide();
+            this.captionsOverlay?.hide();
+
+            this.setSpeechDetected(false);
+
+            // Reset voice button
             const theme = this.getTheme();
             this.voiceButton.style.background = theme.inputBg;
             this.voiceButton.style.color = theme.text;
-            this.voiceButton.innerHTML = this.getMicIcon();
-            this.setSpeechDetected(false);
+            this.voiceButton.innerHTML = icons.mic;
         }
     }
 
@@ -493,8 +548,24 @@ export class ChatInterface {
     public showTranscription(text: string, isFinal: boolean = false): void {
         console.log('📝 ChatInterface: Showing transcription:', text, 'Final:', isFinal);
         this.currentTranscription = text;
+
+        // Show in captions overlay if CC is enabled
+        if (this.ccEnabled && this.captionsOverlay) {
+            if (isFinal) {
+                this.captionsOverlay.showText(text, true);
+                // Clear after delay
+                setTimeout(() => {
+                    this.captionsOverlay?.clear();
+                }, 3000);
+            } else {
+                // Live transcription - show without animation
+                this.captionsOverlay.showText(text, false);
+            }
+        }
+
+        // Also update the old live status for compatibility
         this.updateLiveStatus();
-        
+
         if (isFinal) {
             // Clear transcription after showing final
             setTimeout(() => {
@@ -645,6 +716,11 @@ export class ChatInterface {
     }
 
     public destroy(): void {
+        // Clean up new components
+        this.voiceVisualizer?.destroy();
+        this.captionsOverlay?.destroy();
+        this.voiceControls?.destroy();
+
         this.container.remove();
     }
 }

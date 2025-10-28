@@ -1,4 +1,5 @@
 import { UIConfig, ConnectionState } from '../types';
+import { icons } from './icons';
 
 /**
  * Floating action button for the voice plugin
@@ -42,10 +43,10 @@ export class FloatingButton {
 
     private getSizePixels(): number {
         switch (this.config.buttonSize) {
-            case 'small': return 48;
+            case 'small': return 56;
             case 'large': return 72;
             case 'medium':
-            default: return 60;
+            default: return 64; // Updated to match voice-code design
         }
     }
 
@@ -54,21 +55,39 @@ export class FloatingButton {
         button.className = 'ew-floating-button';
         button.setAttribute('aria-label', 'Open voice chat');
         button.style.cssText = this.getButtonStyles();
-        
+
         // Add icon
         button.innerHTML = this.getButtonIcon();
-        
+
+        // Add hover effects (voice-code style: scale 1.1)
+        button.addEventListener('mouseenter', () => {
+            button.style.transform = 'scale(1.1)';
+        });
+
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+
+        // Add active/tap effect (voice-code style: scale 0.9)
+        button.addEventListener('mousedown', () => {
+            button.style.transform = 'scale(0.9)';
+        });
+
+        button.addEventListener('mouseup', () => {
+            button.style.transform = 'scale(1.1)';
+        });
+
         // Add click handler
         button.addEventListener('click', this.onClick);
-        
+
         this.container.appendChild(button);
         return button;
     }
 
     private getButtonStyles(): string {
-        const primaryColor = this.config.primaryColor || '#007bff';
+        const primaryColor = this.config.primaryColor || '#ff0d40'; // Voice-code brand color
         const size = this.getSizePixels();
-        
+
         return `
             width: ${size}px;
             height: ${size}px;
@@ -81,21 +100,14 @@ export class FloatingButton {
             align-items: center;
             justify-content: center;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            transition: all 0.3s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
             position: relative;
             overflow: hidden;
         `;
     }
 
     private getButtonIcon(): string {
-        return `
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
-            </svg>
-        `;
+        return icons.messageCircle;
     }
 
     public setConnectionState(state: ConnectionState): void {
