@@ -148,6 +148,9 @@ export class WebRTCManager extends EventEmitter {
             console.log('✅ Data channel opened! State:', this.dataChannel?.readyState);
             console.log('⏸️ Waiting for session.created event before sending configuration...');
             // Don't send session update immediately - wait for session.created event
+
+            // Emit event so plugin knows data channel is ready
+            this.emit('dataChannel:ready');
         };
 
         this.dataChannel.onmessage = (event) => {

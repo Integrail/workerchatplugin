@@ -230,6 +230,12 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 this.handleError(error);
             });
 
+            // Handle data channel ready event
+            this.webrtc.on('dataChannel:ready', () => {
+                console.log('✅ Plugin: Data channel is ready');
+                this.emit('dataChannel:ready');
+            });
+
             console.log('🔌 Plugin: Starting WebRTC initialization...');
             await this.webrtc.initialize();
             console.log('✅ Plugin: Voice initialization complete!');
@@ -351,9 +357,12 @@ export class EverworkerVoicePlugin extends EventEmitter {
             
             // Set up session timeout (14 minutes warning, 15 minutes disconnect)
             this.setupSessionTimeout();
-            
+
             console.log('✅ Plugin: Voice session started');
             this.emit('session:started');
+
+            // Send automatic "hi" message once data channel is ready
+            this.sendGreetingWhenReady();
         } catch (error) {
             console.error('❌ Plugin: Failed to start session:', error);
             this.sessionActive = false;
@@ -393,6 +402,33 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
         console.log('✅ Plugin: Voice session ended');
         this.emit('session:ended');
+    }
+
+    private sendGreetingWhenReady(): void {
+        // Check if data channel is already ready
+        if (this.webrtc && (this.webrtc as any).dataChannel?.readyState === 'open') {
+            console.log('👋 Plugin: Data channel already open, sending greeting immediately');
+            this.sendMessage('hi').catch(error => {
+                console.warn('⚠️ Plugin: Could not send automatic greeting:', error);
+            });
+            return;
+        }
+
+        // Otherwise, wait for the dataChannel:ready event
+        console.log('⏳ Plugin: Waiting for data channel to be ready...');
+        const onDataChannelReady = async () => {
+            try {
+                console.log('👋 Plugin: Data channel ready, sending greeting message...');
+                await this.sendMessage('hi');
+                // Remove the listener after successful send
+                this.off('dataChannel:ready', onDataChannelReady);
+            } catch (error) {
+                console.warn('⚠️ Plugin: Could not send automatic greeting:', error);
+                // Don't fail the session if greeting can't be sent
+            }
+        };
+
+        this.once('dataChannel:ready', onDataChannelReady);
     }
 
     private setupSessionTimeout(): void {
