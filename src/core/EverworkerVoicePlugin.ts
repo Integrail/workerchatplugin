@@ -25,6 +25,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
     private sessionActive = false;
     private sessionStartTime: Date | null = null;
     private sessionTimeoutTimer: any = null;
+    private sessionId: string | null = null;
     private readonly MAX_MESSAGES = 100; // Limit message history
 
     constructor(config: PluginConfig) {
@@ -327,11 +328,15 @@ export class EverworkerVoicePlugin extends EventEmitter {
         try {
             // Connect to server
             await this.connect();
-            
+
+            // Generate unique session ID for backend conversation tracking
+            this.sessionId = this.generateSessionId();
+            console.log('📝 Generated session ID:', this.sessionId);
+
             // Mark session as active
             this.sessionActive = true;
             this.sessionStartTime = new Date();
-            
+
             // Update UI
             this.ui?.setSessionActive(true);
             
@@ -381,10 +386,11 @@ export class EverworkerVoicePlugin extends EventEmitter {
         // Mark session as inactive
         this.sessionActive = false;
         this.sessionStartTime = null;
-        
+        this.sessionId = null;
+
         // Update UI
         this.ui?.setSessionActive(false);
-        
+
         console.log('✅ Plugin: Voice session ended');
         this.emit('session:ended');
     }
@@ -484,15 +490,18 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     private addMessage(message: Message): void {
         this.messages.push(message);
-        
+
         // Enforce message limit - remove oldest messages if exceeded
         if (this.messages.length > this.MAX_MESSAGES) {
             const excess = this.messages.length - this.MAX_MESSAGES;
             this.messages.splice(0, excess); // Remove oldest messages
         }
-        
+
         this.ui?.addMessage(message);
         this.storage.saveMessages(this.messages);
+
+        // Async backend logging (fire-and-forget, non-blocking)
+        this.syncMessageToBackend(message);
     }
 
     private handleError(error: Error): void {
@@ -568,6 +577,36 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     private generateId(): string {
         return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    private generateSessionId(): string {
+        // Generate UUID v4
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    private syncMessageToBackend(message: Message): void {
+        // Fire-and-forget async logging to backend
+        if (!this.connection || !this.sessionId) return;
+        if (!('logConversationMessage' in this.connection)) return;
+
+        (this.connection as any).logConversationMessage({
+            workerId: this.config.workerId,
+            sessionId: this.sessionId,
+            message: {
+                id: message.id,
+                type: message.type,
+                content: message.content,
+                timestamp: message.timestamp,
+                source: message.source
+            }
+        }).catch((error: Error) => {
+            console.warn('Failed to sync message to backend:', error);
+            // Don't throw - let conversation continue
+        });
     }
 
     // Public UI control methods

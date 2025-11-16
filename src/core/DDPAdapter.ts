@@ -330,11 +330,21 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
     public async processRealtimeToolCall(toolCall: any): Promise<any> {
         // Get JWT token if available
         const jwtToken = this.getJwtToken();
-        
+
         return this.call('voice.processRealtimeToolCall', [
             toolCall,
             this.config.workerId,
             undefined, // sessionId
+            jwtToken
+        ]);
+    }
+
+    public async logConversationMessage(data: any): Promise<void> {
+        // Get JWT token if available
+        const jwtToken = this.getJwtToken();
+
+        return this.call('voice.logConversationMessage', [
+            data,
             jwtToken
         ]);
     }

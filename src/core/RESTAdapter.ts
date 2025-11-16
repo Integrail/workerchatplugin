@@ -199,6 +199,21 @@ export class RESTAdapter extends EventEmitter implements ConnectionAdapter {
         return response.json();
     }
 
+    public async logConversationMessage(data: any): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/api/v1/voice/log-message`, {
+            method: 'POST',
+            headers: {
+                ...this.headers,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to log message: ${response.statusText}`);
+        }
+    }
+
     // Helper method to make authenticated requests
     private async request(path: string, options: RequestInit = {}): Promise<Response> {
         const url = `${this.baseUrl}${path}`;

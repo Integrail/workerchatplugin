@@ -80,6 +80,7 @@ export interface ConnectionAdapter {
     on(event: string, handler: Function): void;
     off(event: string, handler: Function): void;
     getState(): ConnectionState;
+    logConversationMessage?(data: any): Promise<void>;
 }
 
 export interface VoiceSession {
