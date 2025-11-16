@@ -306,6 +306,12 @@ export class UIManager {
         }
     }
 
+    public setSessionLoading(loading: boolean): void {
+        if (this.chat) {
+            this.chat.setSessionLoading(loading);
+        }
+    }
+
     public addMessage(message: Message): void {
         if (this.chat) {
             this.chat.addMessage(message);

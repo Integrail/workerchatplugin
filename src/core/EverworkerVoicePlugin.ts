@@ -122,9 +122,8 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
             // Load persisted messages
             this.messages = await this.storage.loadMessages();
-            if (this.messages.length > 0) {
-                this.ui.setMessages(this.messages);
-            }
+            // Always call setMessages to trigger welcome message check
+            this.ui.setMessages(this.messages);
 
             // Don't auto-connect, wait for user to start session
             this.setState('disconnected');
@@ -354,11 +353,14 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
     public async startSession(clearHistory: boolean = false): Promise<void> {
         console.log('🚀 Plugin: Starting voice session...');
-        
+
         if (this.sessionActive) {
             console.warn('⚠️ Plugin: Session already active');
             return;
         }
+
+        // Show loading state in UI
+        this.ui?.setSessionLoading(true);
 
         // Optionally clear message history
         if (clearHistory) {
@@ -386,6 +388,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
             // Update UI
             this.ui?.setSessionActive(true);
+            this.ui?.setSessionLoading(false);
             
             // Auto-start microphone
             try {
@@ -410,6 +413,7 @@ export class EverworkerVoicePlugin extends EventEmitter {
         } catch (error) {
             console.error('❌ Plugin: Failed to start session:', error);
             this.sessionActive = false;
+            this.ui?.setSessionLoading(false);
             throw error;
         }
     }

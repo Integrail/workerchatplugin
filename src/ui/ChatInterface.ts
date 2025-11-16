@@ -27,6 +27,9 @@ export class ChatInterface {
     private currentTranscription = '';
     private currentResponse = '';
     private sessionActive = false;
+    private sessionLoading = false;
+    private welcomeDismissed: boolean = false;
+    private welcomeElement: HTMLElement | null = null;
     // New voice-code style components
     private voiceVisualizer: VoiceVisualizer | null = null;
     private captionsOverlay: CaptionsOverlay | null = null;
@@ -43,6 +46,15 @@ export class ChatInterface {
         this.callbacks = callbacks;
         this.container = this.createContainer(showHeader);
         parent.appendChild(this.container);
+
+        // Check if welcome was previously dismissed
+        try {
+            const dismissed = sessionStorage.getItem('ew-welcome-dismissed');
+            this.welcomeDismissed = dismissed === 'true';
+        } catch (e) {
+            // SessionStorage might not be available
+            this.welcomeDismissed = false;
+        }
 
         this.messagesContainer = this.createMessagesContainer();
         this.sessionButton = this.createSessionButton();
@@ -264,12 +276,46 @@ export class ChatInterface {
         if (!this.sessionButton) {
             return; // Button not yet created
         }
-        
+
         const theme = this.getTheme();
-        
-        if (this.sessionActive) {
+
+        // Add keyframe animations if not already added
+        if (!document.getElementById('ew-animations')) {
+            const style = document.createElement('style');
+            style.id = 'ew-animations';
+            style.textContent = `
+                @keyframes ew-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes ew-fade-out {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(-10px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        if (this.sessionLoading) {
+            // Loading state
             this.sessionButton.style.background = '#ff0d40';
             this.sessionButton.style.color = 'white';
+            this.sessionButton.disabled = true;
+            this.sessionButton.style.opacity = '0.8';
+            this.sessionButton.style.cursor = 'not-allowed';
+            this.sessionButton.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: ew-spin 1s linear infinite">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+                Connecting...
+            `;
+        } else if (this.sessionActive) {
+            // Active state
+            this.sessionButton.style.background = '#ff0d40';
+            this.sessionButton.style.color = 'white';
+            this.sessionButton.disabled = false;
+            this.sessionButton.style.opacity = '1';
+            this.sessionButton.style.cursor = 'pointer';
             this.sessionButton.innerHTML = `
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="6" y="6" width="12" height="12" rx="2"></rect>
@@ -277,8 +323,12 @@ export class ChatInterface {
                 End Session
             `;
         } else {
+            // Idle state
             this.sessionButton.style.background = '#ff0d40';
             this.sessionButton.style.color = 'white';
+            this.sessionButton.disabled = false;
+            this.sessionButton.style.opacity = '1';
+            this.sessionButton.style.cursor = 'pointer';
             this.sessionButton.innerHTML = `
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -534,15 +584,113 @@ export class ChatInterface {
         return element;
     }
 
+    private createWelcomeMessage(): HTMLElement {
+        const element = document.createElement('div');
+        const theme = this.getTheme();
+
+        element.className = 'ew-welcome-message';
+        element.style.cssText = `
+            margin: 12px;
+            padding: 16px;
+            background: ${theme.messageBg};
+            border: 1px solid ${theme.border};
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: ${theme.text};
+            position: relative;
+            animation: ew-fade-in 0.3s ease;
+        `;
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            padding-right: 24px;
+        `;
+        content.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${this.config.primaryColor || '#ff0d40'}" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <strong>Welcome to Everworker</strong>
+            </div>
+            <p style="margin: 0; color: ${theme.textSecondary};">
+                This is your Voice and Chat assistant. Please enable microphone access when asked and press "Start Session" to begin.
+            </p>
+        `;
+
+        const dismissButton = document.createElement('button');
+        dismissButton.style.cssText = `
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: ${theme.textSecondary};
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.2s;
+
+            &:hover {
+                background: ${theme.inputBg};
+            }
+        `;
+        dismissButton.innerHTML = icons.x;
+        dismissButton.setAttribute('aria-label', 'Dismiss welcome message');
+        dismissButton.addEventListener('click', () => this.dismissWelcome());
+
+        element.appendChild(content);
+        element.appendChild(dismissButton);
+
+        return element;
+    }
+
+    private dismissWelcome(): void {
+        if (this.welcomeElement) {
+            this.welcomeElement.style.animation = 'ew-fade-out 0.2s ease';
+            setTimeout(() => {
+                this.welcomeElement?.remove();
+                this.welcomeElement = null;
+            }, 200);
+        }
+
+        this.welcomeDismissed = true;
+
+        // Persist dismissal in sessionStorage
+        try {
+            sessionStorage.setItem('ew-welcome-dismissed', 'true');
+        } catch (e) {
+            // SessionStorage might not be available
+        }
+    }
+
+    private showWelcomeIfNeeded(): void {
+        // Show welcome only if messages are empty and not dismissed
+        if (this.messages.length === 0 && !this.welcomeDismissed && !this.welcomeElement) {
+            this.welcomeElement = this.createWelcomeMessage();
+            this.messagesContainer.appendChild(this.welcomeElement);
+        } else if (this.messages.length > 0 && this.welcomeElement) {
+            // Auto-dismiss when first message appears
+            this.dismissWelcome();
+        }
+    }
+
     public setMessages(messages: Message[]): void {
         this.messages = messages;
         this.messagesContainer.innerHTML = '';
         messages.forEach(msg => this.addMessage(msg));
+        this.showWelcomeIfNeeded();
     }
 
     public clearMessages(): void {
         this.messages = [];
         this.messagesContainer.innerHTML = '';
+        this.showWelcomeIfNeeded();
     }
 
     public showTranscription(text: string, isFinal: boolean = false): void {
@@ -672,17 +820,22 @@ export class ChatInterface {
     public setSessionActive(active: boolean): void {
         this.sessionActive = active;
         this.updateSessionButton();
-        
+
         // Enable/disable input controls based on session state
         this.textInput.disabled = !active;
         this.sendButton.disabled = !active;
         this.voiceButton.disabled = !active;
-        
+
         if (!active) {
             this.textInput.placeholder = 'Start a session to begin chatting...';
         } else {
             this.textInput.placeholder = 'Type a message...';
         }
+    }
+
+    public setSessionLoading(loading: boolean): void {
+        this.sessionLoading = loading;
+        this.updateSessionButton();
     }
 
     public showError(message: string): void {
