@@ -46,6 +46,10 @@ export interface FeatureConfig {
     reconnect?: boolean;
     reconnectInterval?: number;
     maxReconnectAttempts?: number;
+    sessionTimeout?: number | null;        // Total session duration in ms (default: 15 * 60 * 1000). Set to null to disable.
+    idleTimeout?: number;                   // Inactivity timeout in ms (default: 5 * 60 * 1000)
+    enableIdleCheck?: boolean;              // Enable idle detection (default: true)
+    idleCheckMessage?: string;              // Custom message when idle (default: auto-generated)
 }
 
 export interface CallbackConfig {
@@ -91,6 +95,7 @@ export interface VoiceSession {
     model: string;
     voice: string;
     instructions: string;
+    sessionId: string; // Server-generated session ID for conversation tracking
     tools?: any[];
 }
 

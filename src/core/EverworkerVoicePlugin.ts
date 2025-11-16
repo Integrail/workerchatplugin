@@ -12,6 +12,12 @@ import { UIManager } from '../ui/UIManager';
 import { StorageManager } from './StorageManager';
 
 export class EverworkerVoicePlugin extends EventEmitter {
+    // Timeout constants
+    private static readonly DEFAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1000;  // 15 minutes
+    private static readonly DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000;       // 5 minutes
+    private static readonly SESSION_WARNING_BEFORE_MS = 60 * 1000;         // 1 minute
+    private static readonly IDLE_GRACE_PERIOD_MS = 60 * 1000;              // 1 minute
+
     private config: PluginConfig;
     private connection: ConnectionAdapter | null = null;
     private webrtc: WebRTCManager | null = null;
@@ -25,7 +31,12 @@ export class EverworkerVoicePlugin extends EventEmitter {
     private sessionActive = false;
     private sessionStartTime: Date | null = null;
     private sessionTimeoutTimer: any = null;
+    private sessionWarningTimer: any = null;
     private sessionId: string | null = null;
+    private lastActivityTime: number | null = null;
+    private idleTimeoutTimer: any = null;
+    private idleGracePeriodTimer: any = null;
+    private idleWarningShown = false;
     private readonly MAX_MESSAGES = 100; // Limit message history
 
     constructor(config: PluginConfig) {
@@ -47,14 +58,14 @@ export class EverworkerVoicePlugin extends EventEmitter {
         }
         
         // Set defaults
-        return {
+        const validated: PluginConfig = {
             ...config,
             auth: config.auth || { type: 'anonymous' },
             ui: {
-                position: 'bottom-right',
-                theme: 'auto',
+                position: 'bottom-right' as const,
+                theme: 'auto' as const,
                 zIndex: 9999,
-                buttonSize: 'medium',
+                buttonSize: 'medium' as const,
                 expandedWidth: '380px',
                 expandedHeight: '600px',
                 ...config.ui
@@ -63,15 +74,33 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 voice: true,
                 text: true,
                 tools: false,
-                persistence: 'session',
+                persistence: 'session' as const,
                 autoConnect: true,
                 reconnect: true,
                 reconnectInterval: 5000,
                 maxReconnectAttempts: 10,
+                sessionTimeout: EverworkerVoicePlugin.DEFAULT_SESSION_TIMEOUT_MS,
+                idleTimeout: EverworkerVoicePlugin.DEFAULT_IDLE_TIMEOUT_MS,
+                enableIdleCheck: true,
                 ...config.features
             },
             callbacks: config.callbacks || {}
         };
+
+        // Validate timeout relationships
+        const sessionTimeout = validated.features?.sessionTimeout;
+        const idleTimeout = validated.features?.idleTimeout;
+
+        if (sessionTimeout !== null && sessionTimeout !== undefined &&
+            idleTimeout !== undefined && idleTimeout >= sessionTimeout) {
+            console.warn(
+                `⚠️ Plugin: idleTimeout (${idleTimeout}ms) should be less than ` +
+                `sessionTimeout (${sessionTimeout}ms). Adjusting idleTimeout to 80% of sessionTimeout.`
+            );
+            validated.features!.idleTimeout = Math.floor(sessionTimeout * 0.8);
+        }
+
+        return validated;
     }
 
     public async init(): Promise<void> {
@@ -206,8 +235,10 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 if (this.ui) {
                     this.ui.setSpeechDetected(true);
                 }
+                // Reset activity on speech detection
+                this.resetActivity();
             });
-            
+
             this.webrtc.on('speech:end', () => {
                 console.log('🔇 Plugin: Speech ended');
                 if (this.ui) {
@@ -291,7 +322,10 @@ export class EverworkerVoicePlugin extends EventEmitter {
 
         console.log('📝 Plugin: Adding message to UI');
         this.addMessage(message);
-        
+
+        // Reset activity timer on user message
+        this.resetActivity();
+
         try {
             // If voice is enabled and WebRTC is connected, send through WebRTC
             if (this.webrtc) {
@@ -335,9 +369,16 @@ export class EverworkerVoicePlugin extends EventEmitter {
             // Connect to server
             await this.connect();
 
-            // Generate unique session ID for backend conversation tracking
-            this.sessionId = this.generateSessionId();
-            console.log('📝 Generated session ID:', this.sessionId);
+            // Get server-generated session ID from WebRTC session
+            const session = this.webrtc?.getSession();
+            if (session && session.sessionId) {
+                this.sessionId = session.sessionId;
+                console.log('📝 Using server-generated session ID:', this.sessionId);
+            } else {
+                // Fallback to client-generated session ID if server doesn't provide one
+                this.sessionId = this.generateSessionId();
+                console.warn('⚠️ No server session ID, using client-generated:', this.sessionId);
+            }
 
             // Mark session as active
             this.sessionActive = true;
@@ -355,8 +396,11 @@ export class EverworkerVoicePlugin extends EventEmitter {
                 // Don't fail the session if mic can't start
             }
             
-            // Set up session timeout (14 minutes warning, 15 minutes disconnect)
+            // Set up session timeout (configurable hard timeout)
             this.setupSessionTimeout();
+
+            // Set up idle timeout (activity-based timeout)
+            this.setupIdleTimeout();
 
             console.log('✅ Plugin: Voice session started');
             this.emit('session:started');
@@ -378,9 +422,14 @@ export class EverworkerVoicePlugin extends EventEmitter {
             return;
         }
 
-        // Clear timeout timer
+        // Clear timeout timers
         this.clearSessionTimeout();
-        
+        this.clearIdleTimeout();
+
+        // Reset idle-related state
+        this.lastActivityTime = null;
+        this.idleWarningShown = false;
+
         // First, stop voice input if active
         try {
             console.log('🔇 Plugin: Stopping voice input before disconnect...');
@@ -434,32 +483,158 @@ export class EverworkerVoicePlugin extends EventEmitter {
     private setupSessionTimeout(): void {
         // Clear any existing timer
         this.clearSessionTimeout();
-        
-        // Warning at 14 minutes
-        setTimeout(() => {
-            if (this.sessionActive) {
-                console.warn('⚠️ Plugin: Session will timeout in 1 minute');
-                this.ui?.showError('Session will timeout in 1 minute. Please save your work.');
-                this.emit('session:timeout-warning');
-            }
-        }, 14 * 60 * 1000);
-        
-        // Auto-disconnect at 15 minutes
+
+        const features = this.config.features;
+        const sessionTimeout = features?.sessionTimeout;
+
+        // Check if session timeout is disabled (null value)
+        if (sessionTimeout === null) {
+            console.log('⏭️ Plugin: Session hard timeout disabled');
+            return;
+        }
+
+        // Use configured timeout or default
+        const timeoutMs = sessionTimeout || EverworkerVoicePlugin.DEFAULT_SESSION_TIMEOUT_MS;
+        const warningMs = timeoutMs - EverworkerVoicePlugin.SESSION_WARNING_BEFORE_MS;
+
+        console.log(`⏰ Plugin: Setting up session timeout (${timeoutMs / 1000}s)`);
+
+        // Warning before timeout
+        if (warningMs > 0) {
+            this.sessionWarningTimer = setTimeout(() => {
+                if (this.sessionActive) {
+                    console.warn('⚠️ Plugin: Session will timeout in 1 minute');
+                    this.ui?.showError('Session will timeout in 1 minute. Please save your work.');
+                    this.emit('session:timeout-warning');
+                }
+            }, warningMs);
+        }
+
+        // Auto-disconnect at timeout
         this.sessionTimeoutTimer = setTimeout(() => {
             if (this.sessionActive) {
                 console.warn('⏰ Plugin: Session timeout reached, disconnecting...');
-                this.ui?.showError('Session timed out after 15 minutes. Please start a new session.');
+                this.ui?.showError(`Session timed out after ${timeoutMs / 60000} minutes. Please start a new session.`);
                 this.endSession();
                 this.emit('session:timeout');
             }
-        }, 15 * 60 * 1000);
+        }, timeoutMs);
     }
 
     private clearSessionTimeout(): void {
+        if (this.sessionWarningTimer) {
+            clearTimeout(this.sessionWarningTimer);
+            this.sessionWarningTimer = null;
+        }
         if (this.sessionTimeoutTimer) {
             clearTimeout(this.sessionTimeoutTimer);
             this.sessionTimeoutTimer = null;
         }
+    }
+
+    private setupIdleTimeout(): void {
+        const features = this.config.features;
+
+        // Check if idle check is enabled (default: true)
+        if (features?.enableIdleCheck === false) {
+            console.log('⏭️ Plugin: Idle timeout disabled');
+            return;
+        }
+
+        const idleTimeout = features?.idleTimeout || EverworkerVoicePlugin.DEFAULT_IDLE_TIMEOUT_MS;
+
+        console.log(`⏰ Plugin: Setting up idle timeout (${idleTimeout / 1000}s)`);
+
+        // Clear any existing timer
+        this.clearIdleTimeout();
+
+        // Reset activity tracking
+        this.lastActivityTime = Date.now();
+        this.idleWarningShown = false;
+
+        // Set up idle check timer
+        this.idleTimeoutTimer = setTimeout(() => {
+            if (this.sessionActive && !this.idleWarningShown) {
+                this.handleIdleWarning();
+            }
+        }, idleTimeout);
+    }
+
+    private clearIdleTimeout(): void {
+        if (this.idleTimeoutTimer) {
+            clearTimeout(this.idleTimeoutTimer);
+            this.idleTimeoutTimer = null;
+        }
+        if (this.idleGracePeriodTimer) {
+            clearTimeout(this.idleGracePeriodTimer);
+            this.idleGracePeriodTimer = null;
+        }
+    }
+
+    private resetActivity(): void {
+        if (!this.sessionActive) return;
+
+        const features = this.config.features;
+        if (features?.enableIdleCheck === false) return;
+
+        console.log('🔄 Plugin: Activity detected, resetting idle timer');
+        this.lastActivityTime = Date.now();
+        this.idleWarningShown = false;
+
+        // Clear grace period timer if user becomes active again
+        if (this.idleGracePeriodTimer) {
+            clearTimeout(this.idleGracePeriodTimer);
+            this.idleGracePeriodTimer = null;
+        }
+
+        // Reset the idle timeout timer directly (avoid recursive setupIdleTimeout call)
+        const idleTimeout = features?.idleTimeout || EverworkerVoicePlugin.DEFAULT_IDLE_TIMEOUT_MS;
+
+        if (this.idleTimeoutTimer) {
+            clearTimeout(this.idleTimeoutTimer);
+        }
+
+        this.idleTimeoutTimer = setTimeout(() => {
+            if (this.sessionActive && !this.idleWarningShown) {
+                this.handleIdleWarning();
+            }
+        }, idleTimeout);
+    }
+
+    private handleIdleWarning(): void {
+        console.log('⚠️ Plugin: User idle, sending check-in message');
+
+        this.idleWarningShown = true;
+
+        // Get custom message or use default
+        const message = this.config.features?.idleCheckMessage ||
+            "Are you still there? Do you have any other questions or shall we finish the session?";
+
+        // Create a simulated assistant message
+        const checkInMessage: Message = {
+            id: this.generateId(),
+            type: 'assistant',
+            content: message,
+            timestamp: new Date(),
+            source: 'text',
+            metadata: { automated: true, type: 'idle-check' }
+        };
+
+        // Add to UI and message history
+        this.addMessage(checkInMessage);
+
+        // Emit event for callbacks
+        this.emit('session:idle-warning');
+
+        // Set timer to end session if no response within grace period
+        this.idleGracePeriodTimer = setTimeout(() => {
+            if (this.sessionActive && this.idleWarningShown) {
+                console.log('⏰ Plugin: No response to idle check, ending session');
+                this.ui?.showError('Session ended due to inactivity.');
+                this.endSession();
+                this.emit('session:idle-timeout');
+            }
+        }, EverworkerVoicePlugin.IDLE_GRACE_PERIOD_MS);
     }
 
     public isSessionActive(): boolean {
@@ -518,7 +693,12 @@ export class EverworkerVoicePlugin extends EventEmitter {
         };
 
         this.addMessage(message);
-        
+
+        // Reset activity on assistant messages (conversation is active)
+        if (message.type === 'assistant' && !message.metadata?.automated) {
+            this.resetActivity();
+        }
+
         if (this.config.callbacks?.onMessage) {
             this.config.callbacks.onMessage(message);
         }
@@ -682,6 +862,20 @@ export class EverworkerVoicePlugin extends EventEmitter {
         this.messages = [];
         this.ui?.clearMessages();
         this.storage.clearMessages();
+    }
+
+    /**
+     * Manually reset the idle timer to prevent session timeout
+     * Useful for scenarios where user is actively engaged but not sending messages
+     * (e.g., reading long responses, reviewing content)
+     */
+    public resetIdleTimer(): void {
+        if (!this.sessionActive) {
+            console.warn('⚠️ Plugin: No active session');
+            return;
+        }
+        console.log('👤 Plugin: Manually resetting idle timer');
+        this.resetActivity();
     }
 }
 

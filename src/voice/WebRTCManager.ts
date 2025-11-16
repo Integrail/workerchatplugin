@@ -15,6 +15,7 @@ export class WebRTCManager extends EventEmitter {
     private session: VoiceSession | null = null;
     private callId: string | null = null; // OpenAI call ID for hangup
     private isRecording = false;
+    private isCleaningUp = false; // Flag to suppress expected errors during cleanup
     private audioQueue: ArrayBuffer[] = [];
     private audioPlayer: AudioPlayer | null = null;
     private audioElement: HTMLAudioElement | null = null;
@@ -23,6 +24,13 @@ export class WebRTCManager extends EventEmitter {
         super();
         this.config = config;
         this.connection = connection;
+    }
+
+    /**
+     * Get the current voice session data including server-generated sessionId
+     */
+    public getSession(): VoiceSession | null {
+        return this.session;
     }
 
     public async initialize(): Promise<void> {
@@ -301,9 +309,8 @@ export class WebRTCManager extends EventEmitter {
     private sendStopEvents(): void {
         console.log('🛑 Sending stop events to OpenAI...');
 
-        // Cancel any ongoing response from the assistant
-        this.sendEvent({ type: 'response.cancel' });
-        console.log('📤 Sent response.cancel');
+        // Note: We don't send response.cancel during cleanup as it may cause errors
+        // if there's no active response. Closing the peer connection is sufficient.
 
         // Clear the input audio buffer to stop processing any pending audio
         this.sendEvent({ type: 'input_audio_buffer.clear' });
@@ -419,7 +426,12 @@ export class WebRTCManager extends EventEmitter {
 
             case 'error':
                 console.error('❌ Realtime API error:', event.error);
-                this.emit('error', new Error(event.error?.message || 'Realtime error'));
+                // Suppress errors during cleanup (e.g., "no active response" when canceling)
+                if (!this.isCleaningUp) {
+                    this.emit('error', new Error(event.error?.message || 'Realtime error'));
+                } else {
+                    console.log('ℹ️ Suppressing error during cleanup (expected behavior)');
+                }
                 break;
 
             default:
@@ -616,6 +628,9 @@ export class WebRTCManager extends EventEmitter {
     public async cleanup(): Promise<void> {
         console.log('🧹 Cleaning up WebRTC Manager...');
 
+        // Set cleanup flag to suppress expected errors
+        this.isCleaningUp = true;
+
         // Step 1: Send stop events to OpenAI before closing connections
         // This follows OpenAI Realtime API best practices
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
@@ -691,6 +706,10 @@ export class WebRTCManager extends EventEmitter {
         this.session = null;
         this.callId = null;
         this.audioQueue = [];
+
+        // Reset cleanup flag
+        this.isCleaningUp = false;
+
         console.log('✅ Cleanup complete - Peer connection closed, all microphone tracks stopped');
     }
 }
