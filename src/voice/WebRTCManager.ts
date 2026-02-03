@@ -461,7 +461,7 @@ export class WebRTCManager extends EventEmitter {
             });
         } catch (error) {
             console.error('Tool call failed:', error);
-            
+
             this.sendEvent({
                 type: 'conversation.item.create',
                 item: {
@@ -473,6 +473,12 @@ export class WebRTCManager extends EventEmitter {
                 }
             });
         }
+
+        // Trigger model to continue with the tool result
+        console.log('🎬 Triggering response.create after tool call');
+        this.sendEvent({
+            type: 'response.create'
+        });
     }
 
     public async startRecording(): Promise<void> {
