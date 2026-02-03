@@ -331,6 +331,7 @@ export class DDPAdapter extends EventEmitter implements ConnectionAdapter {
         // Get JWT token if available
         const jwtToken = this.getJwtToken();
 
+        // Parameter order: toolCall, workerId, sessionId, jwtToken
         return this.call('voice.processRealtimeToolCall', [
             toolCall,
             this.config.workerId,

@@ -97,8 +97,8 @@
         
         <div class="config">
             <h3>Configuration</h3>
-            <input type="text" id="endpoint" placeholder="WebSocket Endpoint (e.g., wss://your-instance.everworker.ai)" value="ws://localhost:3000">
-            <input type="text" id="workerId" placeholder="Worker ID" value="test-worker">
+            <input type="text" id="endpoint" placeholder="WebSocket Endpoint (e.g., wss://your-instance.everworker.ai)">
+            <input type="text" id="workerId" placeholder="Worker ID">
             <input type="text" id="token" placeholder="API Token (optional)">
             <button onclick="initializePlugin()">Initialize Plugin</button>
             <div id="status" class="status"></div>
@@ -129,7 +129,17 @@
     
     <script>
         let plugin = null;
-        
+
+        // Load config from environment (injected by test server)
+        const envConfig = window.__EVERWORKER_CONFIG__ || {};
+
+        // Pre-fill form with environment values on load
+        document.addEventListener('DOMContentLoaded', () => {
+            if (envConfig.endpoint) document.getElementById('endpoint').value = envConfig.endpoint;
+            if (envConfig.workerId) document.getElementById('workerId').value = envConfig.workerId;
+            if (envConfig.token) document.getElementById('token').value = envConfig.token;
+        });
+
         function initializePlugin() {
             const endpoint = document.getElementById('endpoint').value;
             const workerId = document.getElementById('workerId').value;

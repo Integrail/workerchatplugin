@@ -443,12 +443,18 @@ export class WebRTCManager extends EventEmitter {
         if (!event.call_id || !event.name || !event.arguments) return;
 
         try {
+            // Construct toolCall in the format expected by the server
+            // Server expects: { id, function: { name, arguments } }
+            const toolCall = {
+                id: event.call_id,
+                function: {
+                    name: event.name,
+                    arguments: event.arguments,
+                },
+            };
+
             // Process tool call through server
-            const result = await (this.connection as any).processRealtimeToolCall({
-                call_id: event.call_id,
-                name: event.name,
-                arguments: event.arguments
-            });
+            const result = await (this.connection as any).processRealtimeToolCall(toolCall);
 
             // Send result back
             this.sendEvent({
